@@ -135,9 +135,21 @@ window.VOICECARE_NOTIFICATIONS = (() => {
     return false;
   }
 
+  async function scheduleAllReminders(reminders = []) {
+    if (!Array.isArray(reminders) || !reminders.length) return;
+    const plugin = getLocalNotificationsPlugin();
+    if (!plugin) return;
+    for (const rem of reminders) {
+      if (rem && rem.active !== false) {
+        await scheduleReminder(rem);
+      }
+    }
+  }
+
   return {
     requestPermission,
     scheduleReminder,
+    scheduleAllReminders,
     cancelReminder,
     sendTestNotification
   };

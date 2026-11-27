@@ -375,13 +375,14 @@
         summary: result.summary,
         metadata: result.metadata,
         confirmed: false,
+        synced: false,
         createdAt: state.currentEntry?.createdAt || now,
         updatedAt: now
       };
 
       state.currentEntry = entry;
       window.VOICECARE_STORAGE.saveHistoryEntry(entry);
-      window.VOICECARE_SUPABASE.syncSummaryToCloud(state.user, entry);
+      persistEntryToCloud(entry);
 
       renderSummaryScreen();
       navigate('summary');
@@ -396,6 +397,138 @@
         state.activeSummaryAbortController = null;
       }
     }
+  }
+
+  function persistEntryToCloud(entry) {
+    const user = state.user;
+    if (!user || user.mode !== 'supabase') return;
+    window.VOICECARE_SUPABASE?.syncSummaryToCloud?.(user, entry)
+      ?.then((ok) => {
+        if (ok) {
+          window.VOICECARE_STORAGE.saveHistoryEntry({ ...entry, synced: true }, user.uid);
+        }
+      })
+      ?.catch(() => {});
+  }
+
+  function syncRemindersNow() {
+    const user = state.user;
+    if (!user || user.mode !== 'supabase') return;
+    const reminders = window.VOICECARE_STORAGE.getReminders(user.uid);
+    const deleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
+    window.VOICECARE_SUPABASE?.syncRemindersToCloud?.(user, reminders, deleted)?.catch?.(() => {});
+  }
+
+  async function syncAccountData(user, { adoptGuest = false } = {}) {
+    if (!user || user.mode !== 'supabase') return;
+
+    if (adoptGuest) {
+      window.VOICECARE_STORAGE.adoptGuestDataForUser(user.uid);
+    }
+
+    const [cloudSummaries, cloudRemindersPayload] = await Promise.all([
+      window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch(() => null),
+      window.VOICECARE_SUPABASE.loadCloudReminders(user).catch(() => null)
+    ]);
+
+    if (Array.isArray(cloudSummaries)) {
+      const localList = window.VOICECARE_STORAGE.getHistory(user.uid);
+      const cloudMap = new Map(cloudSummaries.map((c) => [c.id, c]));
+      const mergedMap = new Map();
+
+      for (const c of cloudSummaries) {
+        mergedMap.set(c.id, { ...c, synced: true });
+      }
+
+      const unsyncedToUpload = [];
+      for (const l of localList) {
+        if (!l || !l.id) continue;
+        const c = cloudMap.get(l.id);
+        if (c) {
+          const lTime = String(l.updatedAt || l.createdAt || '');
+          const cTime = String(c.updatedAt || c.createdAt || '');
+          if (lTime > cTime && l.synced === false) {
+            mergedMap.set(l.id, l);
+            unsyncedToUpload.push(l);
+          }
+        } else if (l.synced === false) {
+          mergedMap.set(l.id, l);
+          unsyncedToUpload.push(l);
+        }
+      }
+
+      const sortedSummaries = Array.from(mergedMap.values()).sort((a, b) =>
+        String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
+      );
+      window.VOICECARE_STORAGE.replaceHistory(sortedSummaries, user.uid);
+
+      if (unsyncedToUpload.length > 0) {
+        Promise.all(
+          unsyncedToUpload.map(async (entry) => {
+            const ok = await window.VOICECARE_SUPABASE.syncSummaryToCloud(user, entry);
+            if (ok) {
+              window.VOICECARE_STORAGE.saveHistoryEntry({ ...entry, synced: true }, user.uid);
+            }
+          })
+        ).catch(() => {});
+      }
+    }
+
+    if (cloudRemindersPayload) {
+      const localReminders = window.VOICECARE_STORAGE.getReminders(user.uid);
+      const localDeleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
+      const cloudDeletedSet = new Set(cloudRemindersPayload.deleted || []);
+      const localDeletedSet = new Set(localDeleted);
+
+      const mergedRemMap = new Map();
+      for (const c of cloudRemindersPayload.items || []) {
+        if (!localDeletedSet.has(c.id)) {
+          mergedRemMap.set(c.id, c);
+        }
+      }
+
+      let needsCloudUpload = localDeleted.length > 0;
+      for (const l of localReminders) {
+        if (!l || !l.id || cloudDeletedSet.has(l.id)) continue;
+        const existing = mergedRemMap.get(l.id);
+        if (!existing) {
+          mergedRemMap.set(l.id, l);
+          needsCloudUpload = true;
+        } else {
+          const lTime = String(l.updatedAt || '');
+          const cTime = String(existing.updatedAt || '');
+          if (lTime > cTime) {
+            mergedRemMap.set(l.id, l);
+            needsCloudUpload = true;
+          }
+        }
+      }
+
+      const mergedReminders = Array.from(mergedRemMap.values());
+      const mergedDeleted = Array.from(
+        new Set([...(cloudRemindersPayload.deleted || []), ...localDeleted])
+      ).slice(0, 30);
+
+      window.VOICECARE_STORAGE.saveReminders(mergedReminders, user.uid);
+      window.VOICECARE_STORAGE.saveDeletedReminderIds(mergedDeleted, user.uid);
+
+      if (needsCloudUpload) {
+        await window.VOICECARE_SUPABASE.syncRemindersToCloud(user, mergedReminders, mergedDeleted);
+      }
+
+      await window.VOICECARE_NOTIFICATIONS?.scheduleAllReminders?.(mergedReminders);
+    }
+
+    if (state.currentScreen === 'home') renderHomeStats();
+    if (state.currentScreen === 'reminders') renderReminders();
+    if (state.currentScreen === 'history') renderHistory();
+  }
+
+  function refreshDraftBoxForActiveUser() {
+    const box = $('patient-input-box');
+    if (!box) return;
+    box.value = window.VOICECARE_STORAGE.getDraftText();
+    updateInputMeta();
   }
 
   function formatTime12h(time24) {
@@ -492,12 +625,14 @@
     container.querySelectorAll('[data-rem-take]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-rem-take');
+        const now = new Date().toISOString();
         const all = window.VOICECARE_STORAGE.getReminders().map((r) =>
           r.id === id
-            ? { ...r, takenDate: r.takenDate === todayKey ? '' : todayKey }
+            ? { ...r, takenDate: r.takenDate === todayKey ? '' : todayKey, updatedAt: now }
             : r
         );
         window.VOICECARE_STORAGE.saveReminders(all);
+        syncRemindersNow();
         renderReminders();
       });
     });
@@ -508,6 +643,8 @@
         await window.VOICECARE_NOTIFICATIONS.cancelReminder(id);
         const updated = window.VOICECARE_STORAGE.getReminders().filter((r) => r.id !== id);
         window.VOICECARE_STORAGE.saveReminders(updated);
+        window.VOICECARE_STORAGE.recordDeletedReminderId(id);
+        syncRemindersNow();
         renderReminders();
         showToast('Reminder removed.');
       });
@@ -598,8 +735,10 @@
   }
 
   function wireEvents() {
-    // 1. Splash
+    // 1. Splash (Get started shows only on first install)
     $('btn-splash-start').addEventListener('click', () => {
+      window.VOICECARE_STORAGE.setOnboarded(true);
+      $('btn-splash-start')?.classList.add('hidden');
       if (state.user) {
         navigate('home', { pushHistory: false });
       } else {
@@ -616,6 +755,7 @@
         mode: 'guest'
       };
       window.VOICECARE_STORAGE.setUser(state.user);
+      refreshDraftBoxForActiveUser();
       applyLanguage();
       navigate('home', { pushHistory: false });
       showToast(`Welcome, ${state.user.name}!`);
@@ -755,7 +895,9 @@
         if (user) {
           state.user = user;
           window.VOICECARE_STORAGE.setUser(user, { rememberDays: 30 });
+          refreshDraftBoxForActiveUser();
           applyLanguage();
+          await syncAccountData(user, { adoptGuest: true });
           navigate('home', { pushHistory: false });
           showToast('Password updated! You are signed in.');
         } else {
@@ -801,12 +943,10 @@
         state.user = user;
         window.VOICECARE_STORAGE.setUser(user, { rememberDays });
         $('login-password').value = '';
+        refreshDraftBoxForActiveUser();
         applyLanguage();
 
-        const cloudSummaries = await window.VOICECARE_SUPABASE.loadCloudSummaries(user);
-        if (cloudSummaries.length > 0) {
-          cloudSummaries.forEach((s) => window.VOICECARE_STORAGE.saveHistoryEntry(s));
-        }
+        await syncAccountData(user, { adoptGuest: true });
 
         navigate('home', { pushHistory: false });
         showToast(`Welcome back, ${user.name}!`);
@@ -859,7 +999,10 @@
         }
         state.user = user;
         window.VOICECARE_STORAGE.setUser(user, { rememberDays: 30 });
+        refreshDraftBoxForActiveUser();
         applyLanguage();
+
+        await syncAccountData(user, { adoptGuest: true });
 
         navigate('home', { pushHistory: false });
         showToast(`Account created! Welcome, ${user.name}!`);
@@ -889,10 +1032,10 @@
 
           state.user = user;
           window.VOICECARE_STORAGE.setUser(user);
+          refreshDraftBoxForActiveUser();
           applyLanguage();
 
-          const cloudSummaries = await window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch(() => []);
-          cloudSummaries.forEach((s) => window.VOICECARE_STORAGE.saveHistoryEntry(s));
+          await syncAccountData(user, { adoptGuest: true });
 
           navigate('home', { pushHistory: false });
           showToast(`Signed in as ${user.name}.`);
@@ -1109,11 +1252,12 @@
         ...state.currentEntry,
         summary: updatedSummary,
         confirmed: $('edit-confirm-checkbox').checked,
+        synced: false,
         updatedAt: new Date().toISOString()
       };
 
       window.VOICECARE_STORAGE.saveHistoryEntry(state.currentEntry);
-      window.VOICECARE_SUPABASE.syncSummaryToCloud(state.user, state.currentEntry);
+      persistEntryToCloud(state.currentEntry);
 
       renderSummaryScreen();
       renderPdfPreview();
@@ -1125,9 +1269,10 @@
     $('btn-quick-confirm').addEventListener('click', () => {
       if (!state.currentEntry) return;
       state.currentEntry.confirmed = true;
+      state.currentEntry.synced = false;
       state.currentEntry.updatedAt = new Date().toISOString();
       window.VOICECARE_STORAGE.saveHistoryEntry(state.currentEntry);
-      window.VOICECARE_SUPABASE?.syncSummaryToCloud?.(state.user, state.currentEntry);
+      persistEntryToCloud(state.currentEntry);
       renderPdfPreview();
       showToast('Summary confirmed for sharing.');
     });
@@ -1213,12 +1358,14 @@
           time,
           timingTag,
           dosageNote,
-          active: true
+          active: true,
+          updatedAt: new Date().toISOString()
         };
 
         const list = window.VOICECARE_STORAGE.getReminders();
         list.unshift(reminder);
         window.VOICECARE_STORAGE.saveReminders(list);
+        syncRemindersNow();
         const schedRes = await window.VOICECARE_NOTIFICATIONS.scheduleReminder(reminder);
 
         $('reminder-form').reset();
@@ -1278,11 +1425,18 @@
 
     $('btn-logout').addEventListener('click', async () => {
       abortActiveSummaryRequest();
+      if (state.user?.mode === 'supabase') {
+        const activeReminders = window.VOICECARE_STORAGE.getReminders(state.user.uid);
+        for (const r of activeReminders) {
+          await window.VOICECARE_NOTIFICATIONS?.cancelReminder?.(r.id);
+        }
+      }
       await window.VOICECARE_SUPABASE?.signOut?.();
       window.VOICECARE_STORAGE.clearUser();
       state.user = null;
       state.currentEntry = null;
       state.historyStack = [];
+      refreshDraftBoxForActiveUser();
       ['login-password', 'signup-password', 'reset-password', 'reset-password-confirm'].forEach((id) => {
         const el = $(id);
         if (el) el.value = '';
@@ -1298,37 +1452,55 @@
     applyLanguage();
     wireEvents();
 
+    const isFirstInstall = !window.VOICECARE_STORAGE.hasOnboarded() && !state.user;
+    const splashStartBtn = $('btn-splash-start');
+    if (splashStartBtn) {
+      splashStartBtn.classList.toggle('hidden', !isFirstInstall);
+    }
+
     if (!window.VOICECARE_SUPABASE.isConfigured() && $('firebase-status-note')) {
       $('firebase-status-note').textContent =
         'Sign in to save and sync your doctor consultation summaries across devices.';
     }
 
+    if (state.user?.mode === 'supabase' && window.VOICECARE_SUPABASE.isConfigured()) {
+      syncAccountData(state.user).catch(() => {});
+    }
+
     // Returning from a Google sign-in redirect (web build): restore the session
-    // Supabase already stored, so the patient lands signed in.
+    // Supabase already stored, so the patient lands signed in with cloud data.
     if (!state.user && !state.isPasswordRecovery && window.VOICECARE_SUPABASE.isConfigured()) {
       window.VOICECARE_SUPABASE.restoreSession()
-        .then((user) => {
+        .then(async (user) => {
           if (!user || state.isPasswordRecovery) return;
           state.user = user;
           window.VOICECARE_STORAGE.setUser(user);
+          splashStartBtn?.classList.add('hidden');
+          refreshDraftBoxForActiveUser();
           applyLanguage();
-          if (state.currentScreen === 'auth') navigate('home', { pushHistory: false });
+          await syncAccountData(user, { adoptGuest: true });
+          if (state.currentScreen === 'auth' || state.currentScreen === 'splash') {
+            navigate('home', { pushHistory: false });
+          }
         })
         .catch(() => {});
     }
 
-    // Auto-advance splash smoothly after 1.6s if user hasn't clicked yet
-    setTimeout(() => {
-      if (state.currentScreen === 'splash') {
-        if (state.isPasswordRecovery) {
-          navigate('auth', { pushHistory: false });
-        } else if (state.user) {
-          navigate('home', { pushHistory: false });
-        } else {
-          navigate('auth', { pushHistory: false });
+    // First install waits at Splash until user taps "Get started";
+    // returning launches show Splash briefly then continue automatically.
+    if (!isFirstInstall) {
+      setTimeout(() => {
+        if (state.currentScreen === 'splash') {
+          if (state.isPasswordRecovery) {
+            navigate('auth', { pushHistory: false });
+          } else if (state.user) {
+            navigate('home', { pushHistory: false });
+          } else {
+            navigate('auth', { pushHistory: false });
+          }
         }
-      }
-    }, 1600);
+      }, 1300);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

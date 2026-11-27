@@ -42,8 +42,8 @@ flowchart LR
 | 🛡️ **Strict Healthcare Safety** | Never diagnoses or prescribes. Unmentioned fields stay `"Not mentioned by patient"`. Red-flag symptoms surface clickable **108 / 112** emergency helplines. |
 | ✏️ **Edit & Confirm Gate** | Patients review and edit every section individually and confirm accuracy before sharing. |
 | 📄 **Offline PDF & Sharing** | Client-side `jsPDF` (`v4.2+`) report generation, Android native Share sheet (`@capacitor/share`), and one-tap clipboard copy. |
-| 💊 **Smart Medicine Tracker** | Prescription-based reminders via `@capacitor/local-notifications`, featuring a *Next reminder* banner and daily *Mark as taken* tracking. |
-| 🔐 **Guest Mode + Full Auth** | Zero-setup Guest Mode (on-device `localStorage`) or Supabase Email/Password + Google OAuth with *Sign up*, *Forgot password* recovery, *Remember for 30 days*, and PostgreSQL Row-Level Security. |
+| 💊 **Smart Medicine Tracker** | Prescription-based reminders via `@capacitor/local-notifications`, featuring a *Next reminder* banner, daily *Mark as taken* tracking, and cross-device cloud sync. |
+| 🔐 **Guest Mode + Full Cross-Device Auth** | First-install *Get started* onboarding, zero-setup Guest Mode, or Supabase Email/Password + Google OAuth with *Forgot password* recovery, per-account storage isolation, and automatic cross-device sync of both summaries and reminders. |
 | ♿ **Elderly Accessibility & UX** | Warm cream & forest-teal editorial design, 3-way *Text Size* (`Standard / Large / Extra Large`), *High Contrast*, *Calm Display*, and native Android back-button exit from Home. |
 
 ---

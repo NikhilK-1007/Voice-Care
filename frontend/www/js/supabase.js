@@ -219,9 +219,10 @@ window.VOICECARE_SUPABASE = (() => {
       const { data, error } = await sb
         .from('summaries')
         .select('*')
+        .eq('user_id', user.uid)
         .order('updated_at', { ascending: false });
 
-      if (error || !data) return [];
+      if (error || !data) return null;
 
       return data.map((row) => ({
         id: row.id,
@@ -232,12 +233,113 @@ window.VOICECARE_SUPABASE = (() => {
         summary: row.summary,
         metadata: row.metadata,
         confirmed: row.confirmed,
+        synced: true,
         createdAt: row.created_at,
         updatedAt: row.updated_at
       }));
     } catch (err) {
       console.warn('[VoiceCare Supabase] Fetch summaries error:', err);
-      return [];
+      return null;
+    }
+  }
+
+  function compactReminder(rem) {
+    return {
+      id: String(rem.id || ''),
+      n: String(rem.name || '').slice(0, 100),
+      t: String(rem.time || '08:00').slice(0, 5),
+      m: String(rem.timingTag || 'After breakfast').slice(0, 40),
+      d: String(rem.dosageNote || '').slice(0, 120),
+      a: rem.active !== false ? 1 : 0,
+      td: String(rem.takenDate || '').slice(0, 32),
+      u: String(rem.updatedAt || new Date().toISOString())
+    };
+  }
+
+  function expandReminder(c) {
+    if (!c || !c.id) return null;
+    return {
+      id: String(c.id),
+      name: String(c.n ?? c.name ?? ''),
+      time: String(c.t ?? c.time ?? '08:00'),
+      timingTag: String(c.m ?? c.timingTag ?? 'After breakfast'),
+      dosageNote: String(c.d ?? c.dosageNote ?? ''),
+      active: c.a !== undefined ? Boolean(c.a) : c.active !== false,
+      takenDate: String(c.td ?? c.takenDate ?? ''),
+      updatedAt: String(c.u ?? c.updatedAt ?? '')
+    };
+  }
+
+  /**
+   * Syncs the signed-in user's medicine reminders to their Supabase user metadata
+   * so reminders automatically transfer when they log in on any device.
+   */
+  async function syncRemindersToCloud(user, reminders = [], deletedIds = []) {
+    if (!user || user.mode !== 'supabase' || !isConfigured()) {
+      return false;
+    }
+
+    const sb = await getClient();
+    if (!sb) return false;
+
+    try {
+      const payload = {
+        items: (Array.isArray(reminders) ? reminders : []).slice(0, 40).map(compactReminder),
+        deleted: (Array.isArray(deletedIds) ? deletedIds : []).slice(0, 30),
+        updatedAt: new Date().toISOString()
+      };
+      const { error } = await sb.auth.updateUser({
+        data: { voicecare_reminders_v2: payload }
+      });
+      if (error) {
+        console.warn('[VoiceCare Supabase] Reminder sync error:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[VoiceCare Supabase] Reminder sync skipped:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Fetches the user's cloud medicine reminders from Supabase Auth metadata.
+   * Returns null if offline/unreachable so callers don't clobber local data.
+   */
+  async function loadCloudReminders(user) {
+    if (!user || user.mode !== 'supabase' || !isConfigured()) {
+      return null;
+    }
+
+    const sb = await getClient();
+    if (!sb) return null;
+
+    try {
+      let sbUser = null;
+      const { data: userData, error: userErr } = await sb.auth.getUser();
+      if (!userErr && userData?.user) {
+        sbUser = userData.user;
+      } else {
+        const { data: sessData } = await sb.auth.getSession();
+        sbUser = sessData?.session?.user || null;
+      }
+      if (!sbUser) return null;
+
+      const raw = sbUser.user_metadata?.voicecare_reminders_v2;
+      if (!raw) {
+        return { items: [], deleted: [], updatedAt: '' };
+      }
+      const rawItems = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];
+      const items = rawItems.map(expandReminder).filter((r) => r && r.name);
+      const deleted = Array.isArray(raw.deleted) ? raw.deleted.map(String) : [];
+      return {
+        items,
+        deleted,
+        updatedAt: String(raw.updatedAt || '')
+      };
+    } catch (err) {
+      console.warn('[VoiceCare Supabase] Fetch reminders error:', err);
+      return null;
     }
   }
 
@@ -500,6 +602,8 @@ window.VOICECARE_SUPABASE = (() => {
     signOut,
     syncSummaryToCloud,
     deleteCloudSummary,
-    loadCloudSummaries
+    loadCloudSummaries,
+    syncRemindersToCloud,
+    loadCloudReminders
   };
 })();

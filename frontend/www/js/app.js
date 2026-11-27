@@ -30,7 +30,10 @@
     currentEntry: null,
     activeRequestId: 0,
     activeSummaryAbortController: null,
-    healthWarmed: false
+    healthWarmed: false,
+    syncing: false,
+    lastSyncAt: 0,
+    syncStatusText: ''
   };
 
   // DOM helpers
@@ -204,9 +207,19 @@
         state.healthWarmed = true;
         window.VOICECARE_API?.checkHealth?.().catch(() => {});
       }
+      maybeAutoSync();
     }
-    if (screenName === 'reminders') renderReminders();
-    if (screenName === 'history') renderHistory();
+    if (screenName === 'reminders') {
+      renderReminders();
+      maybeAutoSync();
+    }
+    if (screenName === 'history') {
+      renderHistory();
+      maybeAutoSync();
+    }
+    if (screenName === 'about') {
+      updateSyncStatusUi();
+    }
 
     // Never keep the microphone open after leaving the input screen.
     if (screenName !== 'input') window.VOICECARE_VOICE?.abort?.();
@@ -399,14 +412,59 @@
     }
   }
 
+  function updateSyncStatusUi() {
+    const titleEl = $('settings-sync-title');
+    const statusEl = $('settings-sync-status');
+    if (!statusEl) return;
+    if (!state.user || state.user.mode !== 'supabase') {
+      if (titleEl) titleEl.textContent = 'Cloud backup & sync';
+      statusEl.textContent = 'Guest mode (stored on this phone only)';
+      return;
+    }
+    if (titleEl) {
+      titleEl.textContent = state.user.email ? `Cloud sync · ${state.user.email}` : 'Cloud backup & sync';
+    }
+    if (state.syncing) {
+      statusEl.textContent = 'Syncing summaries & reminders…';
+    } else if (state.syncStatusText) {
+      statusEl.textContent = state.syncStatusText;
+    } else {
+      const hCount = window.VOICECARE_STORAGE.getHistory(state.user.uid).length;
+      const rCount = window.VOICECARE_STORAGE.getReminders(state.user.uid).length;
+      statusEl.textContent = `Tap to sync now (${hCount} summaries · ${rCount} reminders)`;
+    }
+  }
+
+  function isCloudOk(res) {
+    return res === true || (res && typeof res === 'object' && res.ok === true);
+  }
+
+  function normalizeSummaryLoad(res) {
+    if (Array.isArray(res)) return { ok: true, items: res };
+    if (res && res.ok && Array.isArray(res.items)) return res;
+    if (res && res.ok === false) return res;
+    return { ok: false, error: 'Could not load cloud summaries.' };
+  }
+
+  function normalizeReminderLoad(res) {
+    if (!res) return { ok: false, error: 'Could not load cloud reminders.' };
+    if (res.ok === false) return res;
+    if (Array.isArray(res.items)) return { ok: true, items: res.items, deleted: res.deleted || [], updatedAt: res.updatedAt || '' };
+    return { ok: false, error: 'Could not load cloud reminders.' };
+  }
+
   function persistEntryToCloud(entry) {
     const user = state.user;
     if (!user || user.mode !== 'supabase') return;
     window.VOICECARE_SUPABASE?.syncSummaryToCloud?.(user, entry)
-      ?.then((ok) => {
-        if (ok) {
+      ?.then((res) => {
+        if (isCloudOk(res)) {
           window.VOICECARE_STORAGE.saveHistoryEntry({ ...entry, synced: true }, user.uid);
+          state.syncStatusText = 'All summaries & reminders synced';
+        } else if (res?.error) {
+          state.syncStatusText = res.error;
         }
+        updateSyncStatusUi();
       })
       ?.catch(() => {});
   }
@@ -416,112 +474,174 @@
     if (!user || user.mode !== 'supabase') return;
     const reminders = window.VOICECARE_STORAGE.getReminders(user.uid);
     const deleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
-    window.VOICECARE_SUPABASE?.syncRemindersToCloud?.(user, reminders, deleted)?.catch?.(() => {});
+    window.VOICECARE_SUPABASE?.syncRemindersToCloud?.(user, reminders, deleted)
+      ?.then((res) => {
+        if (isCloudOk(res)) {
+          state.syncStatusText = 'All summaries & reminders synced';
+        } else if (res?.error) {
+          state.syncStatusText = res.error;
+        }
+        updateSyncStatusUi();
+      })
+      ?.catch?.(() => {});
   }
 
-  async function syncAccountData(user, { adoptGuest = false } = {}) {
+  function maybeAutoSync() {
+    if (!state.user || state.user.mode !== 'supabase') return;
+    if (state.syncing || Date.now() - state.lastSyncAt < 8000) return;
+    syncAccountData(state.user, { adoptGuest: true, silent: true }).catch(() => {});
+  }
+
+  async function syncAccountData(user, { adoptGuest = true, silent = false } = {}) {
     if (!user || user.mode !== 'supabase') return;
+    if (state.syncing) return;
+    state.syncing = true;
+    updateSyncStatusUi();
 
-    if (adoptGuest) {
-      window.VOICECARE_STORAGE.adoptGuestDataForUser(user.uid);
-    }
-
-    const [cloudSummaries, cloudRemindersPayload] = await Promise.all([
-      window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch(() => null),
-      window.VOICECARE_SUPABASE.loadCloudReminders(user).catch(() => null)
-    ]);
-
-    if (Array.isArray(cloudSummaries)) {
-      const localList = window.VOICECARE_STORAGE.getHistory(user.uid);
-      const cloudMap = new Map(cloudSummaries.map((c) => [c.id, c]));
-      const mergedMap = new Map();
-
-      for (const c of cloudSummaries) {
-        mergedMap.set(c.id, { ...c, synced: true });
+    try {
+      if (adoptGuest) {
+        window.VOICECARE_STORAGE.adoptGuestDataForUser(user.uid);
       }
 
-      const unsyncedToUpload = [];
-      for (const l of localList) {
-        if (!l || !l.id) continue;
-        const c = cloudMap.get(l.id);
-        if (c) {
-          const lTime = String(l.updatedAt || l.createdAt || '');
-          const cTime = String(c.updatedAt || c.createdAt || '');
-          if (lTime > cTime && l.synced === false) {
+      // Immediately reflect any locally adopted summaries/reminders before network returns
+      if (state.currentScreen === 'home') renderHomeStats();
+      if (state.currentScreen === 'reminders') renderReminders();
+      if (state.currentScreen === 'history') renderHistory();
+
+      const [rawSumRes, rawRemRes] = await Promise.all([
+        window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch((e) => ({ ok: false, error: e.message })),
+        window.VOICECARE_SUPABASE.loadCloudReminders(user).catch((e) => ({ ok: false, error: e.message }))
+      ]);
+
+      const sumRes = normalizeSummaryLoad(rawSumRes);
+      const remRes = normalizeReminderLoad(rawRemRes);
+      const syncErrors = [];
+
+      if (sumRes.authExpired || remRes.authExpired) {
+        state.syncStatusText = 'Sign-in session expired. Please sign out and sign in again to sync.';
+        if (!silent) showToast(state.syncStatusText);
+        return;
+      }
+
+      if (sumRes.ok) {
+        const cloudSummaries = sumRes.items;
+        const localList = window.VOICECARE_STORAGE.getHistory(user.uid);
+        const cloudMap = new Map(cloudSummaries.map((c) => [c.id, c]));
+        const mergedMap = new Map();
+
+        for (const c of cloudSummaries) {
+          mergedMap.set(c.id, { ...c, synced: true });
+        }
+
+        const unsyncedToUpload = [];
+        for (const l of localList) {
+          if (!l || !l.id) continue;
+          const c = cloudMap.get(l.id);
+          if (c) {
+            const lTime = String(l.updatedAt || l.createdAt || '');
+            const cTime = String(c.updatedAt || c.createdAt || '');
+            if (lTime > cTime && l.synced === false) {
+              mergedMap.set(l.id, l);
+              unsyncedToUpload.push(l);
+            }
+          } else if (l.synced === false) {
             mergedMap.set(l.id, l);
             unsyncedToUpload.push(l);
           }
-        } else if (l.synced === false) {
-          mergedMap.set(l.id, l);
-          unsyncedToUpload.push(l);
         }
-      }
 
-      const sortedSummaries = Array.from(mergedMap.values()).sort((a, b) =>
-        String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
-      );
-      window.VOICECARE_STORAGE.replaceHistory(sortedSummaries, user.uid);
+        const sortedSummaries = Array.from(mergedMap.values()).sort((a, b) =>
+          String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
+        );
+        window.VOICECARE_STORAGE.replaceHistory(sortedSummaries, user.uid);
 
-      if (unsyncedToUpload.length > 0) {
-        Promise.all(
-          unsyncedToUpload.map(async (entry) => {
-            const ok = await window.VOICECARE_SUPABASE.syncSummaryToCloud(user, entry);
-            if (ok) {
-              window.VOICECARE_STORAGE.saveHistoryEntry({ ...entry, synced: true }, user.uid);
-            }
-          })
-        ).catch(() => {});
-      }
-    }
-
-    if (cloudRemindersPayload) {
-      const localReminders = window.VOICECARE_STORAGE.getReminders(user.uid);
-      const localDeleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
-      const cloudDeletedSet = new Set(cloudRemindersPayload.deleted || []);
-      const localDeletedSet = new Set(localDeleted);
-
-      const mergedRemMap = new Map();
-      for (const c of cloudRemindersPayload.items || []) {
-        if (!localDeletedSet.has(c.id)) {
-          mergedRemMap.set(c.id, c);
+        if (unsyncedToUpload.length > 0) {
+          await Promise.all(
+            unsyncedToUpload.map(async (entry) => {
+              const res = await window.VOICECARE_SUPABASE.syncSummaryToCloud(user, entry);
+              if (isCloudOk(res)) {
+                window.VOICECARE_STORAGE.saveHistoryEntry({ ...entry, synced: true }, user.uid);
+              } else if (res?.error) {
+                syncErrors.push(res.error);
+              }
+            })
+          );
         }
+      } else if (sumRes.error) {
+        syncErrors.push(sumRes.error);
       }
 
-      let needsCloudUpload = localDeleted.length > 0;
-      for (const l of localReminders) {
-        if (!l || !l.id || cloudDeletedSet.has(l.id)) continue;
-        const existing = mergedRemMap.get(l.id);
-        if (!existing) {
-          mergedRemMap.set(l.id, l);
-          needsCloudUpload = true;
-        } else {
-          const lTime = String(l.updatedAt || '');
-          const cTime = String(existing.updatedAt || '');
-          if (lTime > cTime) {
-            mergedRemMap.set(l.id, l);
-            needsCloudUpload = true;
+      if (remRes.ok) {
+        const localReminders = window.VOICECARE_STORAGE.getReminders(user.uid);
+        const localDeleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
+        const cloudDeletedSet = new Set(remRes.deleted || []);
+        const localDeletedSet = new Set(localDeleted);
+
+        const mergedRemMap = new Map();
+        for (const c of remRes.items || []) {
+          if (!localDeletedSet.has(c.id)) {
+            mergedRemMap.set(c.id, c);
           }
         }
+
+        let needsCloudUpload = localDeleted.length > 0;
+        for (const l of localReminders) {
+          if (!l || !l.id || cloudDeletedSet.has(l.id)) continue;
+          const existing = mergedRemMap.get(l.id);
+          if (!existing) {
+            mergedRemMap.set(l.id, l);
+            needsCloudUpload = true;
+          } else {
+            const lTime = String(l.updatedAt || '');
+            const cTime = String(existing.updatedAt || '');
+            if (lTime > cTime) {
+              mergedRemMap.set(l.id, l);
+              needsCloudUpload = true;
+            }
+          }
+        }
+
+        const mergedReminders = Array.from(mergedRemMap.values());
+        const mergedDeleted = Array.from(
+          new Set([...(remRes.deleted || []), ...localDeleted])
+        ).slice(0, 30);
+
+        window.VOICECARE_STORAGE.saveReminders(mergedReminders, user.uid);
+        window.VOICECARE_STORAGE.saveDeletedReminderIds(mergedDeleted, user.uid);
+
+        if (needsCloudUpload) {
+          const remUpload = await window.VOICECARE_SUPABASE.syncRemindersToCloud(
+            user,
+            mergedReminders,
+            mergedDeleted
+          );
+          if (!isCloudOk(remUpload) && remUpload?.error) {
+            syncErrors.push(remUpload.error);
+          }
+        }
+
+        await window.VOICECARE_NOTIFICATIONS?.scheduleAllReminders?.(mergedReminders);
+      } else if (remRes.error) {
+        syncErrors.push(remRes.error);
       }
 
-      const mergedReminders = Array.from(mergedRemMap.values());
-      const mergedDeleted = Array.from(
-        new Set([...(cloudRemindersPayload.deleted || []), ...localDeleted])
-      ).slice(0, 30);
-
-      window.VOICECARE_STORAGE.saveReminders(mergedReminders, user.uid);
-      window.VOICECARE_STORAGE.saveDeletedReminderIds(mergedDeleted, user.uid);
-
-      if (needsCloudUpload) {
-        await window.VOICECARE_SUPABASE.syncRemindersToCloud(user, mergedReminders, mergedDeleted);
+      state.lastSyncAt = Date.now();
+      if (syncErrors.length > 0) {
+        state.syncStatusText = `Sync issue: ${syncErrors[0]}`;
+        if (!silent) showToast(state.syncStatusText);
+      } else {
+        const hLen = window.VOICECARE_STORAGE.getHistory(user.uid).length;
+        const rLen = window.VOICECARE_STORAGE.getReminders(user.uid).length;
+        state.syncStatusText = `Synced (${hLen} summaries · ${rLen} reminders)`;
       }
 
-      await window.VOICECARE_NOTIFICATIONS?.scheduleAllReminders?.(mergedReminders);
+      if (state.currentScreen === 'home') renderHomeStats();
+      if (state.currentScreen === 'reminders') renderReminders();
+      if (state.currentScreen === 'history') renderHistory();
+    } finally {
+      state.syncing = false;
+      updateSyncStatusUi();
     }
-
-    if (state.currentScreen === 'home') renderHomeStats();
-    if (state.currentScreen === 'reminders') renderReminders();
-    if (state.currentScreen === 'history') renderHistory();
   }
 
   function refreshDraftBoxForActiveUser() {
@@ -1407,6 +1527,17 @@
       });
     });
 
+    $('settings-sync-row')?.addEventListener('click', async () => {
+      if (!state.user || state.user.mode !== 'supabase') {
+        showToast('Sign in on the login screen to sync your data across devices.');
+        return;
+      }
+      await syncAccountData(state.user, { adoptGuest: true, silent: false });
+      if (!state.syncStatusText.startsWith('Sync issue') && !state.syncStatusText.includes('expired')) {
+        showToast(state.syncStatusText || 'Cloud sync complete!');
+      }
+    });
+
     $('settings-lang-row')?.addEventListener('click', () => navigate('language'));
     $('settings-privacy-row')?.addEventListener('click', () => {
       $('privacy-details-card')?.classList.toggle('hidden');
@@ -1436,7 +1567,10 @@
       state.user = null;
       state.currentEntry = null;
       state.historyStack = [];
+      state.syncStatusText = '';
+      state.lastSyncAt = 0;
       refreshDraftBoxForActiveUser();
+      updateSyncStatusUi();
       ['login-password', 'signup-password', 'reset-password', 'reset-password-confirm'].forEach((id) => {
         const el = $(id);
         if (el) el.value = '';
@@ -1463,9 +1597,17 @@
         'Sign in to save and sync your doctor consultation summaries across devices.';
     }
 
-    if (state.user?.mode === 'supabase' && window.VOICECARE_SUPABASE.isConfigured()) {
-      syncAccountData(state.user).catch(() => {});
+    if (window.Capacitor?.Plugins?.App) {
+      window.Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) maybeAutoSync();
+      });
     }
+    window.addEventListener('online', () => maybeAutoSync());
+
+    if (state.user?.mode === 'supabase' && window.VOICECARE_SUPABASE.isConfigured()) {
+      syncAccountData(state.user, { adoptGuest: true, silent: true }).catch(() => {});
+    }
+    updateSyncStatusUi();
 
     // Returning from a Google sign-in redirect (web build): restore the session
     // Supabase already stored, so the patient lands signed in with cloud data.

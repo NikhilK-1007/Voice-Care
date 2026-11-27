@@ -173,18 +173,33 @@ window.VOICECARE_SUPABASE = (() => {
     throw new Error('Sign up failed. Please try again.');
   }
 
+  async function hasValidSession(sb) {
+    try {
+      const { data } = await sb.auth.getSession();
+      if (data?.session?.access_token) return data.session;
+    } catch {
+      // Ignore read errors
+    }
+    return null;
+  }
+
   async function syncSummaryToCloud(user, entry) {
     if (!user || user.mode !== 'supabase' || !isConfigured()) {
-      return false;
+      return { ok: false, skipped: true };
     }
 
     const sb = await getClient();
-    if (!sb) return false;
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+
+    const session = await hasValidSession(sb);
+    if (!session) {
+      return { ok: false, authExpired: true, error: 'Sign-in session expired. Please sign in again.' };
+    }
 
     try {
       const record = {
         id: entry.id,
-        user_id: user.uid,
+        user_id: session.user?.id || user.uid,
         patient_name: entry.patientName || user.name || '',
         patient_text: entry.patientText || '',
         language: entry.language || 'en',
@@ -192,39 +207,52 @@ window.VOICECARE_SUPABASE = (() => {
         summary: entry.summary || {},
         metadata: entry.metadata || {},
         confirmed: Boolean(entry.confirmed),
-        updated_at: new Date().toISOString()
+        updated_at: entry.updatedAt || new Date().toISOString()
       };
 
-      const { error } = await sb.from('summaries').upsert(record);
+      const { error } = await sb.from('summaries').upsert(record, { onConflict: 'id' });
       if (error) {
+        // If RLS denies UPDATE during upsert on a fresh row, try plain INSERT
+        if (/42501|row-level security|policy/i.test(error.message || '')) {
+          const ins = await sb.from('summaries').insert(record);
+          if (!ins.error) return { ok: true };
+        }
         console.warn('[VoiceCare Supabase] Cloud sync error:', error.message);
-        return false;
+        return { ok: false, error: error.message };
       }
-      return true;
+      return { ok: true };
     } catch (err) {
       console.warn('[VoiceCare Supabase] Cloud sync skipped:', err.message);
-      return false;
+      return { ok: false, error: err.message };
     }
   }
 
   async function loadCloudSummaries(user) {
     if (!user || user.mode !== 'supabase' || !isConfigured()) {
-      return [];
+      return { ok: false, skipped: true };
     }
 
     const sb = await getClient();
-    if (!sb) return [];
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+
+    const session = await hasValidSession(sb);
+    if (!session) {
+      return { ok: false, authExpired: true, error: 'Sign-in session expired. Please sign in again.' };
+    }
 
     try {
+      const uid = session.user?.id || user.uid;
       const { data, error } = await sb
         .from('summaries')
         .select('*')
-        .eq('user_id', user.uid)
+        .eq('user_id', uid)
         .order('updated_at', { ascending: false });
 
-      if (error || !data) return null;
+      if (error || !data) {
+        return { ok: false, error: error?.message || 'Could not load cloud summaries.' };
+      }
 
-      return data.map((row) => ({
+      const items = data.map((row) => ({
         id: row.id,
         patientName: row.patient_name,
         patientText: row.patient_text,
@@ -237,9 +265,10 @@ window.VOICECARE_SUPABASE = (() => {
         createdAt: row.created_at,
         updatedAt: row.updated_at
       }));
+      return { ok: true, items };
     } catch (err) {
       console.warn('[VoiceCare Supabase] Fetch summaries error:', err);
-      return null;
+      return { ok: false, error: err.message };
     }
   }
 
@@ -276,11 +305,16 @@ window.VOICECARE_SUPABASE = (() => {
    */
   async function syncRemindersToCloud(user, reminders = [], deletedIds = []) {
     if (!user || user.mode !== 'supabase' || !isConfigured()) {
-      return false;
+      return { ok: false, skipped: true };
     }
 
     const sb = await getClient();
-    if (!sb) return false;
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+
+    const session = await hasValidSession(sb);
+    if (!session) {
+      return { ok: false, authExpired: true, error: 'Sign-in session expired. Please sign in again.' };
+    }
 
     try {
       const payload = {
@@ -293,26 +327,30 @@ window.VOICECARE_SUPABASE = (() => {
       });
       if (error) {
         console.warn('[VoiceCare Supabase] Reminder sync error:', error.message);
-        return false;
+        return { ok: false, error: error.message };
       }
-      return true;
+      return { ok: true };
     } catch (err) {
       console.warn('[VoiceCare Supabase] Reminder sync skipped:', err.message);
-      return false;
+      return { ok: false, error: err.message };
     }
   }
 
   /**
    * Fetches the user's cloud medicine reminders from Supabase Auth metadata.
-   * Returns null if offline/unreachable so callers don't clobber local data.
    */
   async function loadCloudReminders(user) {
     if (!user || user.mode !== 'supabase' || !isConfigured()) {
-      return null;
+      return { ok: false, skipped: true };
     }
 
     const sb = await getClient();
-    if (!sb) return null;
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+
+    const session = await hasValidSession(sb);
+    if (!session) {
+      return { ok: false, authExpired: true, error: 'Sign-in session expired. Please sign in again.' };
+    }
 
     try {
       let sbUser = null;
@@ -320,26 +358,26 @@ window.VOICECARE_SUPABASE = (() => {
       if (!userErr && userData?.user) {
         sbUser = userData.user;
       } else {
-        const { data: sessData } = await sb.auth.getSession();
-        sbUser = sessData?.session?.user || null;
+        sbUser = session.user || null;
       }
-      if (!sbUser) return null;
+      if (!sbUser) return { ok: false, authExpired: true, error: 'Sign-in session expired.' };
 
       const raw = sbUser.user_metadata?.voicecare_reminders_v2;
       if (!raw) {
-        return { items: [], deleted: [], updatedAt: '' };
+        return { ok: true, items: [], deleted: [], updatedAt: '' };
       }
       const rawItems = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];
       const items = rawItems.map(expandReminder).filter((r) => r && r.name);
       const deleted = Array.isArray(raw.deleted) ? raw.deleted.map(String) : [];
       return {
+        ok: true,
         items,
         deleted,
         updatedAt: String(raw.updatedAt || '')
       };
     } catch (err) {
       console.warn('[VoiceCare Supabase] Fetch reminders error:', err);
-      return null;
+      return { ok: false, error: err.message };
     }
   }
 
@@ -426,15 +464,17 @@ window.VOICECARE_SUPABASE = (() => {
       return;
     }
 
-    if (!params.access_token || !params.refresh_token) return;
+    if (!params.access_token && !params.refresh_token && !params.code) return;
 
     const sb = await getClient();
     if (!sb) return;
 
-    const { data, error } = await sb.auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token
-    });
+    const { data, error } = params.code
+      ? await sb.auth.exchangeCodeForSession(params.code)
+      : await sb.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token
+        });
 
     if (error || !data?.user) {
       if (pendingNativeAuth) {

@@ -540,11 +540,11 @@
           if (c) {
             const lTime = String(l.updatedAt || l.createdAt || '');
             const cTime = String(c.updatedAt || c.createdAt || '');
-            if (lTime > cTime && l.synced === false) {
+            if (lTime > cTime && l.synced !== true) {
               mergedMap.set(l.id, l);
               unsyncedToUpload.push(l);
             }
-          } else if (l.synced === false) {
+          } else if (l.synced !== true) {
             mergedMap.set(l.id, l);
             unsyncedToUpload.push(l);
           }

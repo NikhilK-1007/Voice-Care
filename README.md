@@ -8,6 +8,11 @@
   ![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-14B8A6)
   ![AI](https://img.shields.io/badge/AI-Google%20Gemini-0D9488)
   ![Auth & DB](https://img.shields.io/badge/Auth%20%26%20DB-Supabase%20PostgreSQL-0F766E)
+
+  <br /><br />
+  <a href="https://github.com/NikhilK-1007/Voice-Care/releases">
+    <img src="https://img.shields.io/badge/Download-Android%20APK%20(Releases)-0D5C50?style=for-the-badge&logo=android&logoColor=white" alt="Download Android APK" />
+  </a>
 </div>
 
 ---
@@ -137,7 +142,11 @@ Open **`http://localhost:3000`** in Chrome/Edge and press `F12` → `Ctrl + Shif
 
 ---
 
-## 🤖 Building the Android APK
+## 🤖 Android APK Download & Build
+
+- **Download Pre-Built APK:** Get `VoiceCare-debug.apk` directly from [GitHub Releases](https://github.com/NikhilK-1007/Voice-Care/releases).
+
+### Build from Source
 
 | Component | Version |
 | --- | --- |

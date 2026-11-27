@@ -12,7 +12,7 @@ window.VOICECARE_CONFIG = {
    * below). For an APK on a real phone, set this to a reachable address, e.g.
    * 'http://192.168.1.9:3000' on the same Wi-Fi, or your deployed HTTPS URL.
    */
-  API_BASE_URL: 'http://192.168.1.9:3000',
+  API_BASE_URL: 'https://voice-care-t4gz.onrender.com',
 
   /**
    * Resolves the backend API base URL automatically:

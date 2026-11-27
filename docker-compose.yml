@@ -1,0 +1,17 @@
+services:
+  voicecare:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voicecare-app
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      ALLOW_DEMO_FALLBACK: "${ALLOW_DEMO_FALLBACK:-true}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-3.8-flash}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
+    restart: unless-stopped

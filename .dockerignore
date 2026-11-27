@@ -1,0 +1,17 @@
+.git
+.gitignore
+.vscode
+.cloud-attachments
+.freebuff
+node_modules
+**/node_modules
+backend/.env
+dist
+frontend/android
+frontend/node_modules
+frontend/scripts
+frontend/package*.json
+frontend/capacitor.config.json
+README.md
+*.log
+.DS_Store

@@ -100,6 +100,9 @@ Voice-Care/
 │           ├── pdf.js            # Offline jsPDF generation & Capacitor Share
 │           ├── notifications.js  # Local medicine reminder alerts
 │           └── app.js            # Navigation & screen controllers
+├── Dockerfile                    # Lightweight Node 20 Alpine container image
+├── docker-compose.yml            # One-command startup (no secret keys required)
+├── .dockerignore
 └── README.md
 ```
 
@@ -108,10 +111,17 @@ Voice-Care/
 ## 🛠️ Local Setup & Running
 
 ### Prerequisites
-- **Node.js v18+** ([nodejs.org](https://nodejs.org/))
+- **Option A (Docker):** [Docker Desktop](https://www.docker.com/products/docker-desktop/) — starts in one command with zero secret keys.
+- **Option B (Local Node):** **Node.js v18+** ([nodejs.org](https://nodejs.org/))
 - *(Optional)* **Google Gemini API Key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) — **not required to run**: the app starts without any secret keys using built-in demo fallback (or connects to the hosted backend).
 
-### 1️⃣ Start the Backend (Zero-Config / No Keys Required)
+### 1️⃣ Quick Start with Docker Compose (No Keys Required)
+```bash
+docker compose up --build
+```
+Open **`http://localhost:3000`** once started (or pass an optional key: `GEMINI_API_KEY=your_key docker compose up --build`).
+
+### 2️⃣ Or Start Backend Directly with Node.js (Zero-Config)
 ```bash
 cd backend
 npm install
@@ -129,7 +139,7 @@ ALLOW_DEMO_FALLBACK=true
 ALLOWED_ORIGINS=*
 ```
 
-### 2️⃣ Prepare Frontend Assets & Preview in Browser
+### 3️⃣ Prepare Frontend Assets & Preview in Browser
 ```bash
 cd frontend
 npm install

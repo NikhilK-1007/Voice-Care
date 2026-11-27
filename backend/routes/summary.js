@@ -1,0 +1,67 @@
+const express = require('express');
+const { validatePatientInput } = require('../services/safetyValidator');
+const { generateHealthSummary } = require('../services/geminiService');
+
+const router = express.Router();
+
+/**
+ * VoiceCare accepts a description in any language (the AI detects the script),
+ * so we only normalise the code instead of rejecting unknown languages.
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function sanitizeLanguage(raw) {
+  if (typeof raw !== 'string') return 'en';
+  const trimmed = raw.trim();
+  if (!trimmed) return 'en';
+  if (trimmed.toLowerCase() === 'auto') return 'auto';
+  if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(trimmed)) return 'en';
+  return trimmed.toLowerCase();
+}
+
+/**
+ * Shared handler for generating or regenerating a structured health summary.
+ */
+async function handleSummarize(req, res) {
+  try {
+    const { patientText, language = 'en', extraNotes = '' } = req.body || {};
+
+    const validation = validatePatientInput(patientText);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: validation.error
+      });
+    }
+
+    const safeLanguage = sanitizeLanguage(language);
+    const safeExtraNotes =
+      typeof extraNotes === 'string' ? extraNotes.trim().slice(0, 1000) : '';
+
+    const result = await generateHealthSummary({
+      patientText: validation.text,
+      language: safeLanguage,
+      extraNotes: safeExtraNotes
+    });
+
+    return res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('[VoiceCare API] Error generating summary:', error.message);
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      error:
+        status >= 500
+          ? 'Unable to generate your health summary right now. Please try again in a moment.'
+          : error.message
+    });
+  }
+}
+
+router.post('/summarize', handleSummarize);
+router.post('/regenerate', handleSummarize);
+
+module.exports = router;

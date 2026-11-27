@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#146C5E" />
+  <meta name="color-scheme" content="light" />
+  <title>VoiceCare — Health summaries your doctor can read</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="apple-touch-icon" href="assets/logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="text-large">
+  <!-- Icon set -->
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></symbol>
+    <symbol id="i-pill" viewBox="0 0 24 24"><rect x="3.5" y="8" width="17" height="8" rx="4"/><path d="M12 8v8"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.4 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.4-3.4-8.5S9.7 5.9 12 3.5z"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="m14 6 4 4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 20h18z"/><path d="M12 10v4M12 17.5v.5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c0-3.6 3.1-5.5 7-5.5s7 1.9 7 5.5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></symbol>
+  </svg>
+
+  <div class="app">
+    <!-- App bar -->
+    <header id="topbar" class="appbar hidden">
+      <button id="btn-back" class="icon-button" type="button" aria-label="Go back">
+        <svg class="icon"><use href="#i-arrow-left"></use></svg>
+      </button>
+      <h1 id="topbar-title" class="appbar-title">VoiceCare</h1>
+      <button id="btn-lang-pill" class="appbar-action" type="button" aria-label="Change language">
+        English
+      </button>
+    </header>
+
+    <main id="main-content" class="content has-nav">
+      <!-- 1 · SPLASH -->
+      <section id="screen-splash" class="screen active" aria-label="Welcome">
+        <div class="splash">
+          <div class="splash-mark">
+            <img src="assets/logo.svg" alt="" class="splash-logo" />
+          </div>
+          <h2 class="splash-title">VoiceCare</h2>
+          <p class="splash-rule" aria-hidden="true"></p>
+          <p class="splash-tagline" id="splash-tagline">
+            Speak naturally. Let AI organise. Help your doctor understand.
+          </p>
+          <div class="splash-actions">
+            <button id="btn-splash-start" class="btn btn-primary" type="button">Get started</button>
+            <p class="splash-note">Indian patients · any language · 108 / 112 help</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 · SIGN IN -->
+      <section id="screen-auth" class="screen" aria-label="Sign in">
+        <div class="page-head">
+          <p class="eyebrow">Welcome</p>
+          <h2 class="page-title">Prepare for your doctor visit in minutes</h2>
+          <p class="page-sub">Choose how you want to start. You can create an account later.</p>
+        </div>
+
+        <div class="segmented" role="tablist" aria-label="How to start">
+          <button
+            id="tab-guest"
+            class="segment is-active"
+            data-auth-tab="guest"
+            role="tab"
+            aria-selected="true"
+            aria-controls="auth-panel-guest"
+            type="button"
+          >
+            Guest mode
+          </button>
+          <button
+            id="tab-login"
+            class="segment"
+            data-auth-tab="login"
+            role="tab"
+            aria-selected="false"
+            aria-controls="auth-panel-login"
+            type="button"
+          >
+            Sign in
+          </button>
+        </div>
+
+        <div id="auth-panel-guest" class="auth-panel" role="tabpanel" aria-labelledby="tab-guest">
+          <section class="panel">
+            <div class="panel-head">
+              <h3 class="panel-title">Start without an account</h3>
+              <p class="panel-sub">
+                Nothing to set up. Your summaries stay on this device.
+              </p>
+            </div>
+            <label class="field-label" for="guest-name-input">
+              Your name <span class="optional">optional</span>
+            </label>
+            <input id="guest-name-input" class="input" type="text" placeholder="e.g. Ramesh Kumar" autocomplete="name" />
+            <p class="panel-sub" style="margin-top: 8px;">Printed on the report you hand to your doctor.</p>
+            <button id="btn-guest-demo" class="btn btn-primary" type="button" style="margin-top: 14px;">
+              Continue as guest
+            </button>
+          </section>
+
+          <p class="footnote">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg>
+            Guest summaries are stored only on this phone and are never uploaded to an account.
+          </p>
+        </div>
+
+        <div id="auth-panel-login" class="auth-panel hidden" role="tabpanel" aria-labelledby="tab-login">
+          <section class="panel">
+            <div class="panel-head">
+              <h3 class="panel-title">Your account</h3>
+              <p class="panel-sub" id="firebase-status-note">
+                Sign in to keep your summaries in sync across devices.
+              </p>
+            </div>
+            <form id="login-form" class="stack">
+              <div class="field">
+                <label class="field-label" for="login-email">Email</label>
+                <input id="login-email" class="input" type="email" placeholder="patient@example.com" required />
+              </div>
+              <div class="field">
+                <label class="field-label" for="login-password">Password</label>
+                <input id="login-password" class="input" type="password" placeholder="••••••••" required />
+              </div>
+              <button class="btn btn-primary" type="submit">Sign in or create account</button>
+            </form>
+
+            <div class="divider" role="separator"><span>or</span></div>
+
+            <button id="btn-google-signin" class="btn btn-google" type="button">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.4z"/>
+                <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.2H3.1v2.6A10 10 0 0 0 12 22z"/>
+                <path fill="#FBBC05" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.5H3.1a10 10 0 0 0 0 9z"/>
+                <path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1z"/>
+              </svg>
+              Continue with Google
+            </button>
+          </section>
+
+          <p class="footnote">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg>
+            No account yet? Entering a new email and password creates one automatically.
+          </p>
+        </div>
+      </section>
+
+      <!-- 3 · HOME -->
+      <section id="screen-home" class="screen" aria-label="Home">
+        <div class="hero">
+          <p class="eyebrow" id="home-greeting">Namaste</p>
+          <h2 class="hero-title">Your health, written clearly.</h2>
+          <p class="hero-sub" id="home-subtitle">
+            Prepare a clear health summary before meeting your doctor.
+          </p>
+          <button id="btn-home-describe" class="btn btn-primary" type="button">
+            Describe your health concern
+          </button>
+        </div>
+
+        <nav class="list" aria-label="VoiceCare sections">
+          <button id="tile-language" class="list-row" type="button">
+            <span class="row-icon"><svg class="icon"><use href="#i-globe"></use></svg></span>
+            <span class="row-body">
+              <span class="row-title">Language</span>
+              <span class="row-meta" id="home-active-lang-label">English</span>
+            </span>
+            <svg class="icon row-chevron" aria-hidden="true"><use href="#i-chevron"></use></svg>
+          </button>
+
+          <button id="tile-reminders" class="list-row" type="button">
+            <span class="row-icon"><svg class="icon"><use href="#i-pill"></use></svg></span>
+            <span class="row-body">
+              <span class="row-title">Medicine reminders</span>
+              <span class="row-meta" id="home-reminder-count">0 active reminders</span>
+            </span>
+            <svg class="icon row-chevron" aria-hidden="true"><use href="#i-chevron"></use></svg>
+          </button>
+
+          <button id="tile-history" class="list-row" type="button">
+            <span class="row-icon"><svg class="icon"><use href="#i-file"></use></svg></span>
+            <span class="row-body">
+              <span class="row-title">Saved summaries</span>
+              <span class="row-meta" id="home-history-count">0 past visits</span>
+            </span>
+            <svg class="icon row-chevron" aria-hidden="true"><use href="#i-chevron"></use></svg>
+          </button>
+
+          <button id="tile-about" class="list-row" type="button">
+            <span class="row-icon"><svg class="icon"><use href="#i-shield"></use></svg></span>
+            <span class="row-body">
+              <span class="row-title">Safety &amp; accessibility</span>
+              <span class="row-meta">Text size, contrast, emergency numbers</span>
+            </span>
+            <svg class="icon row-chevron" aria-hidden="true"><use href="#i-chevron"></use></svg>
+          </button>
+        </nav>
+
+        <section class="panel panel-tint">
+          <p class="section-label">Before your appointment</p>
+          <ul class="checklist">
+            <li>Keep your medicine strips or prescription photo handy.</li>
+            <li>Note when symptoms started and whether they feel mild or severe.</li>
+            <li>Mention long-term conditions such as sugar (diabetes) or BP.</li>
+            <li>Prepare the summary before entering the clinic.</li>
+          </ul>
+        </section>
+
+        <p class="footnote">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"></use></svg>
+          VoiceCare helps you explain symptoms. It does not diagnose illness or prescribe medicine.
+        </p>
+      </section>
+
+      <!-- 4 · LANGUAGE -->
+      <section id="screen-language" class="screen" aria-label="Language">
+        <div class="page-head">
+          <p class="eyebrow">Settings</p>
+          <h2 class="page-title">App language</h2>
+          <p class="page-sub">
+            This changes VoiceCare's own instructions. Your description can be dictated in any
+            language — the AI translates it into the English summary a doctor reads.
+          </p>
+        </div>
+
+        <div class="choice-list" role="radiogroup" aria-label="App language">
+          <button class="choice lang-card" data-lang="en" type="button" role="radio" aria-checked="true">
+            <span class="choice-body">
+              <span class="choice-title">English</span>
+              <span class="choice-sub">Simple English instructions</span>
+            </span>
+            <span class="badge" id="lang-check-en">Selected</span>
+          </button>
+
+          <button class="choice lang-card" data-lang="hi" type="button" role="radio" aria-checked="false">
+            <span class="choice-body">
+              <span class="choice-title">हिन्दी</span>
+              <span class="choice-sub">सरल हिन्दी निर्देश</span>
+            </span>
+            <span class="badge" id="lang-check-hi">Select</span>
+          </button>
+
+          <button class="choice lang-card" data-lang="kn" type="button" role="radio" aria-checked="false">
+            <span class="choice-body">
+              <span class="choice-title">ಕನ್ನಡ</span>
+              <span class="choice-sub">ಸರಳ ಕನ್ನಡ ಸೂಚನೆಗಳು</span>
+            </span>
+            <span class="badge" id="lang-check-kn">Select</span>
+          </button>
+
+          <button class="choice lang-card" data-lang="auto" type="button" role="radio" aria-checked="false">
+            <span class="choice-body">
+              <span class="choice-title">Any other language</span>
+              <span class="choice-sub">Tamil, Telugu, Bengali, Marathi, Malayalam, Urdu…</span>
+            </span>
+            <span class="badge" id="lang-check-auto">Select</span>
+          </button>
+        </div>
+
+        <button id="btn-lang-continue" class="btn btn-primary" type="button">
+          Continue to health description
+        </button>
+      </section>
+
+      <!-- 5 · HEALTH INPUT -->
+      <section id="screen-input" class="screen" aria-label="Describe health concern">
+        <div class="page-head">
+          <p class="eyebrow">New summary</p>
+          <h2 class="page-title">How are you feeling?</h2>
+          <p class="page-sub" id="input-page-sub">
+            Tap the mic and speak, or type. Short, everyday words are enough — we organise the rest.
+          </p>
+        </div>
+
+        <section class="voice-panel">
+          <button id="btn-voice" class="voice-record" type="button" aria-pressed="false">
+            <span class="voice-ring" aria-hidden="true">
+              <svg class="icon"><use href="#i-mic"></use></svg>
+            </span>
+            <span class="voice-copy">
+              <span class="voice-title" id="voice-title">Tap to speak</span>
+              <span class="voice-sub" id="voice-sub">
+                Speak in any Indian language. We write it down; you can edit every word.
+              </span>
+            </span>
+            <span class="voice-timer" id="voice-timer" hidden>0:00</span>
+          </button>
+
+          <p class="voice-status" id="voice-status" role="status" aria-live="polite"></p>
+
+          <textarea
+            id="patient-input-box"
+            class="textarea input-box"
+            lang="en"
+            inputmode="text"
+            enterkeyhint="done"
+            autocapitalize="sentences"
+            spellcheck="true"
+            placeholder="Example: I have had fever and body pain since 3 days…"
+          ></textarea>
+
+          <div class="meta-row">
+            <span id="input-char-count">0 characters</span>
+            <span class="chip" id="input-lang-indicator">English</span>
+          </div>
+
+          <div class="inline-actions">
+            <button id="btn-fill-sample" class="btn btn-quiet btn-sm" type="button">Load sample</button>
+            <button id="btn-clear-input" class="btn btn-quiet btn-sm" type="button">Clear</button>
+          </div>
+
+          <p class="footnote voice-privacy">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg>
+            Your recording goes to VoiceCare's own server only to be written down as text. It is not
+            stored, and you can type instead if you prefer.
+          </p>
+        </section>
+
+        <button id="btn-generate-summary" class="btn btn-primary" type="button">
+          Create health summary
+        </button>
+        <p class="footnote" id="input-disclaimer">
+          For doctor communication only — not a medical diagnosis or prescription.
+        </p>
+      </section>
+
+      <!-- 6 · PROCESSING -->
+      <section id="screen-processing" class="screen" aria-label="Preparing summary">
+        <div class="processing">
+          <div class="spinner" aria-hidden="true"></div>
+          <h2 class="processing-title" id="processing-title">Organising your health summary…</h2>
+          <p class="processing-sub" id="processing-subtitle">
+            VoiceCare is structuring your words for your doctor without changing their meaning.
+          </p>
+
+          <ol class="progress-list">
+            <li class="step is-active" id="proc-step-1">Reading your description safely</li>
+            <li class="step" id="proc-step-2">Organising symptoms, duration and medicines</li>
+            <li class="step" id="proc-step-3">Preparing questions for your doctor</li>
+          </ol>
+
+          <button id="btn-cancel-processing" class="btn btn-quiet" type="button">Cancel</button>
+        </div>
+      </section>
+
+      <!-- 7 · SUMMARY -->
+      <section id="screen-summary" class="screen" aria-label="Health summary">
+        <div id="summary-emergency-banner" class="alert alert-danger" style="display: none;">
+          <p class="alert-title">Urgent care guidance</p>
+          <p id="summary-emergency-text"></p>
+        </div>
+
+        <div class="page-head">
+          <p class="eyebrow">Ready to share</p>
+          <h2 class="page-title">Doctor summary</h2>
+          <p class="page-sub" id="summary-disclaimer-text"></p>
+        </div>
+
+        <div class="meta-bar">
+          <span class="meta-source" id="summary-source-badge">Prepared for consultation</span>
+          <span class="badge" id="summary-lang-badge">English</span>
+        </div>
+
+        <div id="summary-sections-container"></div>
+
+        <div class="stack" style="margin-top: 18px;">
+          <button id="btn-go-pdf" class="btn btn-primary" type="button">Review &amp; share</button>
+          <div class="btn-row">
+            <button id="btn-edit-summary" class="btn btn-secondary" type="button">Edit</button>
+            <button id="btn-regenerate-summary" class="btn btn-quiet" type="button">Regenerate</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 · EDIT -->
+      <section id="screen-edit" class="screen" aria-label="Edit summary">
+        <div class="page-head">
+          <p class="eyebrow">Review</p>
+          <h2 class="page-title">Check every detail</h2>
+          <p class="page-sub">Correct anything the AI misheard before your doctor reads it.</p>
+        </div>
+
+        <form id="edit-summary-form" class="stack">
+          <div class="field">
+            <label class="field-label" for="edit-main-concern">Main health concern</label>
+            <textarea id="edit-main-concern" class="textarea" rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-symptoms">Symptoms — one per line</label>
+            <textarea id="edit-symptoms" class="textarea" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-duration">Duration</label>
+            <input id="edit-duration" class="input" type="text" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-severity">Severity</label>
+            <input id="edit-severity" class="input" type="text" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-history">Relevant medical history</label>
+            <textarea id="edit-history" class="textarea" rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-meds">Current medications</label>
+            <textarea id="edit-meds" class="textarea" rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-observations">Additional observations</label>
+            <textarea id="edit-observations" class="textarea" rows="2"></textarea>
+          </div>
+          <div class="field">
+            <label class="field-label" for="edit-questions">Questions to ask the doctor — one per line</label>
+            <textarea id="edit-questions" class="textarea" rows="4"></textarea>
+          </div>
+
+          <section class="panel panel-tint">
+            <div class="panel-head">
+              <h3 class="panel-title">Missing something?</h3>
+              <p class="panel-sub">Add extra details and let the AI reorganise the whole summary.</p>
+            </div>
+            <label class="field-label" for="edit-extra-notes">Extra notes</label>
+            <textarea id="edit-extra-notes" class="textarea" rows="2" placeholder="Optional"></textarea>
+            <button id="btn-edit-regenerate" class="btn btn-secondary btn-sm" type="button" style="margin-top: 10px;">
+              Reorganise with AI
+            </button>
+          </section>
+
+          <label class="confirm">
+            <input id="edit-confirm-checkbox" type="checkbox" />
+            <span>
+              I have checked these details and confirm they describe what I want to tell my doctor.
+            </span>
+          </label>
+
+          <button class="btn btn-primary" type="submit">Save &amp; preview report</button>
+        </form>
+      </section>
+
+      <!-- 9 · REPORT -->
+      <section id="screen-pdf" class="screen" aria-label="Report preview">
+        <div id="pdf-unconfirmed-banner" class="alert alert-warning no-print" style="display: none;">
+          <p class="alert-title">Not confirmed yet</p>
+          <p>Confirm the summary before sharing it with your doctor.</p>
+          <button id="btn-quick-confirm" class="btn btn-secondary btn-sm" type="button" style="margin-top: 10px;">
+            Confirm summary
+          </button>
+        </div>
+
+        <article id="pdf-preview-sheet" class="sheet">
+          <header class="sheet-head">
+            <p class="sheet-brand">VoiceCare</p>
+            <h2 class="sheet-title">Doctor consultation summary</h2>
+            <p class="sheet-meta" id="pdf-meta-line"></p>
+          </header>
+          <div id="pdf-preview-body"></div>
+          <footer class="sheet-foot">
+            Prepared by the patient with VoiceCare AI as a communication aid. Not a medical
+            diagnosis, prescription or verified medical record.
+          </footer>
+        </article>
+
+        <div class="stack no-print">
+          <button id="btn-download-pdf" class="btn btn-primary" type="button">
+            <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+            Download PDF
+          </button>
+          <div class="btn-row">
+            <button id="btn-share-doctor" class="btn btn-secondary" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#i-share"></use></svg>
+              Share
+            </button>
+            <button id="btn-copy-summary" class="btn btn-quiet" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>
+              Copy text
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 · REMINDERS -->
+      <section id="screen-reminders" class="screen" aria-label="Medicine reminders">
+        <div class="page-head">
+          <p class="eyebrow">Prescription only</p>
+          <h2 class="page-title">Medicine reminders</h2>
+          <p class="page-sub">
+            Add reminders exactly as your doctor prescribed. VoiceCare never suggests medicines or
+            doses.
+          </p>
+        </div>
+
+        <form id="reminder-form" class="panel stack">
+          <div class="field">
+            <label class="field-label" for="rem-name">Medicine name</label>
+            <input id="rem-name" class="input" type="text" placeholder="e.g. Metformin 500mg" required />
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="rem-time">Time</label>
+              <input id="rem-time" class="input" type="time" value="08:00" required />
+            </div>
+            <div class="field">
+              <label class="field-label" for="rem-timing-tag">With meals</label>
+              <select id="rem-timing-tag" class="select">
+                <option value="After Breakfast">After breakfast</option>
+                <option value="Before Breakfast">Before breakfast</option>
+                <option value="After Lunch">After lunch</option>
+                <option value="After Dinner">After dinner</option>
+                <option value="Bedtime">Bedtime</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="rem-note">Doctor's note <span class="optional">optional</span></label>
+            <input id="rem-note" class="input" type="text" placeholder="e.g. 1 tablet with warm water" />
+          </div>
+          <button class="btn btn-primary" type="submit">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
+            Add reminder
+          </button>
+        </form>
+
+        <p class="section-label">Scheduled</p>
+        <div id="reminders-list"></div>
+      </section>
+
+      <!-- 11 · HISTORY -->
+      <section id="screen-history" class="screen" aria-label="Saved summaries">
+        <div class="page-head">
+          <p class="eyebrow">History</p>
+          <h2 class="page-title">Saved summaries</h2>
+          <p class="page-sub">Reopen, edit or share a previous visit.</p>
+        </div>
+
+        <div class="search">
+          <svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg>
+          <input id="history-search" class="search-input" type="search" placeholder="Search by symptom"
+                 aria-label="Search saved summaries" />
+        </div>
+
+        <div id="history-list"></div>
+      </section>
+
+      <!-- 12 · ABOUT -->
+      <section id="screen-about" class="screen" aria-label="Safety and accessibility">
+        <div class="page-head">
+          <p class="eyebrow">Settings</p>
+          <h2 class="page-title">Safety &amp; accessibility</h2>
+          <p class="page-sub">Make VoiceCare easier to read and use.</p>
+        </div>
+
+        <section class="panel">
+          <p class="section-label">Display</p>
+          <div class="field">
+            <label class="field-label" for="acc-text-size">Text size</label>
+            <select id="acc-text-size" class="select">
+              <option value="standard">Standard</option>
+              <option value="large">Large (recommended)</option>
+              <option value="xl">Extra large</option>
+            </select>
+          </div>
+          <label class="switch-row">
+            <span class="switch-body">
+              <span class="row-title">High contrast</span>
+              <span class="row-meta">Darker text, stronger borders</span>
+            </span>
+            <input id="acc-high-contrast" type="checkbox" class="switch" />
+          </label>
+          <label class="switch-row">
+            <span class="switch-body">
+              <span class="row-title">Calm display</span>
+              <span class="row-meta">Reduce animation</span>
+            </span>
+            <input id="acc-reduced-motion" type="checkbox" class="switch" />
+          </label>
+        </section>
+
+        <section class="alert alert-danger">
+          <p class="alert-title">Emergency — India</p>
+          <p>
+            Do not wait for a summary if there is chest pain, severe breathlessness, sudden
+            face or arm weakness, heavy bleeding or loss of consciousness.
+          </p>
+          <p class="alert-phones">Call <strong>108</strong> (ambulance) or <strong>112</strong> (national emergency).</p>
+        </section>
+
+        <section class="panel">
+          <p class="section-label">How VoiceCare works</p>
+          <p class="body-text">
+            <strong>VoiceCare listens inside the app.</strong> Tap the mic, speak in your own
+            language, and AI on VoiceCare's own server writes it down. Gemini AI then organises it
+            into the eight-section summary your doctor reads.
+          </p>
+          <ul class="checklist">
+            <li>Never diagnoses illness or prescribes medicine.</li>
+            <li>Never invents symptoms or history you did not mention.</li>
+            <li>Keeps the AI key on the server, never in the app.</li>
+          </ul>
+        </section>
+
+        <button id="btn-logout" class="btn btn-danger" type="button">Sign out / switch profile</button>
+        <p class="footnote">VoiceCare · version 1.0 · Made for Indian clinics</p>
+      </section>
+    </main>
+
+    <!-- Bottom navigation -->
+    <nav id="bottom-nav" class="tabbar hidden" aria-label="Primary">
+      <button class="tab is-active" data-screen="home" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg>
+        <span id="nav-label-home">Home</span>
+      </button>
+      <button class="tab" data-screen="input" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg>
+        <span id="nav-label-input">Speak</span>
+      </button>
+      <button class="tab" data-screen="reminders" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-pill"></use></svg>
+        <span id="nav-label-reminders">Medicines</span>
+      </button>
+      <button class="tab" data-screen="history" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-file"></use></svg>
+        <span id="nav-label-history">History</span>
+      </button>
+      <button class="tab" data-screen="about" type="button">
+        <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg>
+        <span id="nav-label-about">Settings</span>
+      </button>
+    </nav>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/voice.js"></script>
+  <script src="js/pdf.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

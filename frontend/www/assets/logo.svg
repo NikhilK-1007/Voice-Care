@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <linearGradient id="vcTeal" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F5C52"/>
+      <stop offset="100%" stop-color="#0D9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="url(#vcTeal)"/>
+  <!-- Heart silhouette -->
+  <path
+    d="M60 95C60 95 23 73.5 23 47.5C23 35.6 32.4 26 44 26C51.2 26 57.5 29.7 60 35.2C62.5 29.7 68.8 26 76 26C87.6 26 97 35.6 97 47.5C97 73.5 60 95 60 95Z"
+    fill="#FFFFFF"
+  />
+  <!-- Symmetrical voice soundwave bars -->
+  <rect x="37" y="51" width="5.5" height="14" rx="2.75" fill="#146C5E"/>
+  <rect x="46.5" y="43" width="5.5" height="30" rx="2.75" fill="#146C5E"/>
+  <rect x="57.25" y="36" width="5.5" height="44" rx="2.75" fill="#146C5E"/>
+  <rect x="68" y="43" width="5.5" height="30" rx="2.75" fill="#146C5E"/>
+  <rect x="77.5" y="51" width="5.5" height="14" rx="2.75" fill="#146C5E"/>
+</svg>

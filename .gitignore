@@ -1,0 +1,14 @@
+node_modules/
+backend/.env
+dist/
+frontend/android/build/
+frontend/android/app/build/
+.gradle/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/app/google-services.json
+frontend/ios/
+.cloud-attachments/
+.freebuff/
+*.log
+.DS_Store

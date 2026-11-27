@@ -12,8 +12,8 @@
   },
   "plugins": {
     "LocalNotifications": {
-      "smallIcon": "ic_stat_icon_config_sample",
-      "iconColor": "#0D9488"
+      "smallIcon": "ic_stat_voicecare",
+      "iconColor": "#0D5C50"
     }
   }
 }

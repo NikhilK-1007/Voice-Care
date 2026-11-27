@@ -34,6 +34,46 @@ window.VOICECARE_PDF = (() => {
     return lines.join('\n');
   }
 
+  /** Standard jsPDF Helvetica cannot render Devanagari/Kannada glyphs; map labels to safe ASCII English. */
+  function safePdfLanguageLabel(entry) {
+    const map = { en: 'English', hi: 'Hindi', kn: 'Kannada', auto: 'Multilingual' };
+    if (entry.language && map[entry.language]) return map[entry.language];
+    const label = String(entry.languageLabel || 'English');
+    if (label.includes('हिन्दी')) return 'Hindi';
+    if (label.includes('ಕನ್ನಡ')) return 'Kannada';
+    return toPdfAscii(label) || 'English';
+  }
+
+  function toPdfAscii(value) {
+    return String(value || '')
+      .replace(/[—–]/g, '-')
+      .replace(/[•]/g, '*')
+      .replace(/[^\x20-\x7E\n]/g, '')
+      .trim();
+  }
+
+  async function copyTextSafe(text) {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // Fall through to legacy copy
+      }
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (!ok) throw new Error('Clipboard unavailable');
+    return true;
+  }
+
   function createPdfDocument(entry) {
     const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
     if (!jsPDFCtor) {
@@ -71,12 +111,15 @@ window.VOICECARE_PDF = (() => {
       dateStyle: 'medium',
       timeStyle: 'short'
     });
-    doc.text(`Prepared: ${dateStr}`, margin, y);
+    doc.text(`Prepared: ${toPdfAscii(dateStr)}`, margin, y);
     if (entry.patientName) {
-      doc.text(`Patient: ${entry.patientName}`, pageWidth - margin, y, { align: 'right' });
+      const safeName = toPdfAscii(entry.patientName);
+      if (safeName) {
+        doc.text(`Patient: ${safeName}`, pageWidth - margin, y, { align: 'right' });
+      }
     }
     y += 6;
-    doc.text(`Input Language: ${entry.languageLabel || 'English'}`, margin, y);
+    doc.text(`Input Language: ${safePdfLanguageLabel(entry)}`, margin, y);
     y += 4;
     doc.setDrawColor(203, 213, 225);
     doc.line(margin, y, pageWidth - margin, y);
@@ -239,12 +282,13 @@ window.VOICECARE_PDF = (() => {
     }
 
     // Fallback: copy to clipboard
-    await navigator.clipboard.writeText(textSummary);
+    await copyTextSafe(textSummary);
     return { method: 'clipboard-fallback' };
   }
 
   return {
     formatPlainTextSummary,
+    copyTextSafe,
     downloadPdf,
     shareWithDoctor
   };

@@ -185,12 +185,26 @@ window.VOICECARE_VOICE = (() => {
 
     // 32 kbps mono opus is plenty for speech, and a smaller clip uploads a lot
     // faster on a phone's mobile data than the browser's default bitrate.
-    const options = { audioBitsPerSecond: 32000 };
-    if (mimeType) options.mimeType = mimeType;
+    const optionCandidates = [];
+    if (mimeType) {
+      optionCandidates.push({ audioBitsPerSecond: 32000, mimeType });
+      optionCandidates.push({ mimeType });
+    } else {
+      optionCandidates.push({ audioBitsPerSecond: 32000 });
+    }
+    optionCandidates.push({});
 
-    try {
-      recorder = new MediaRecorder(stream, options);
-    } catch {
+    recorder = null;
+    for (const opts of optionCandidates) {
+      try {
+        recorder = new MediaRecorder(stream, opts);
+        break;
+      } catch {
+        recorder = null;
+      }
+    }
+
+    if (!recorder) {
       setStatus(copy.unsupported, true);
       releaseStream();
       return;
@@ -198,6 +212,14 @@ window.VOICECARE_VOICE = (() => {
 
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) chunks.push(event.data);
+    };
+
+    recorder.onerror = () => {
+      recorder = null;
+      chunks = [];
+      releaseStream();
+      setRecording(false);
+      setStatus(strings().failed, true);
     };
 
     recorder.onstop = () => {
@@ -218,8 +240,16 @@ window.VOICECARE_VOICE = (() => {
       upload(blob);
     };
 
-    startedAt = Date.now();
-    recorder.start();
+    try {
+      startedAt = Date.now();
+      recorder.start();
+    } catch {
+      recorder = null;
+      chunks = [];
+      releaseStream();
+      setStatus(copy.unsupported, true);
+      return;
+    }
     setRecording(true);
     setStatus('');
     updateTimer();
@@ -279,5 +309,13 @@ window.VOICECARE_VOICE = (() => {
     bind();
   }
 
-  return { toggle, start, stop, abort, refreshLabels };
+  return {
+    toggle,
+    start,
+    stop,
+    abort,
+    refreshLabels,
+    isRecording: () => Boolean(recorder),
+    isBusy: () => busy
+  };
 })();

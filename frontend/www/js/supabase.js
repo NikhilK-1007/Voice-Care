@@ -13,6 +13,7 @@ window.VOICECARE_SUPABASE = (() => {
   const NATIVE_AUTH_REDIRECT = 'in.voicecare.app://auth-callback';
   let pendingNativeAuth = null;
   let recoveryCallback = null;
+  let nativeListenerBound = false;
 
   function isConfigured() {
     const cfg = window.VOICECARE_CONFIG?.SUPABASE_CONFIG;
@@ -68,12 +69,7 @@ window.VOICECARE_SUPABASE = (() => {
     }
 
     if (data?.user) {
-      return {
-        uid: data.user.id,
-        name: data.user.user_metadata?.full_name || email.split('@')[0],
-        email: data.user.email,
-        mode: 'supabase'
-      };
+      return toUser(data.user);
     }
 
     throw new Error('Sign in failed. Please try again.');
@@ -166,11 +162,11 @@ window.VOICECARE_SUPABASE = (() => {
     }
 
     if (data?.user) {
+      const user = toUser(data.user);
+      if (fullName.trim()) user.name = fullName.trim();
       return {
-        uid: data.user.id,
-        name: fullName.trim() || email.split('@')[0],
-        email: data.user.email,
-        mode: 'supabase'
+        ...user,
+        needsConfirmation: !data.session
       };
     }
 
@@ -242,6 +238,42 @@ window.VOICECARE_SUPABASE = (() => {
     } catch (err) {
       console.warn('[VoiceCare Supabase] Fetch summaries error:', err);
       return [];
+    }
+  }
+
+  async function deleteCloudSummary(user, entryId) {
+    if (!user || user.mode !== 'supabase' || !entryId || !isConfigured()) {
+      return false;
+    }
+
+    const sb = await getClient();
+    if (!sb) return false;
+
+    try {
+      const { error } = await sb
+        .from('summaries')
+        .delete()
+        .eq('id', entryId)
+        .eq('user_id', user.uid);
+      if (error) {
+        console.warn('[VoiceCare Supabase] Cloud delete error:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[VoiceCare Supabase] Cloud delete skipped:', err.message);
+      return false;
+    }
+  }
+
+  async function signOut() {
+    if (!isConfigured()) return;
+    const sb = await getClient();
+    if (!sb) return;
+    try {
+      await sb.auth.signOut();
+    } catch (err) {
+      console.warn('[VoiceCare Supabase] Sign out warning:', err.message);
     }
   }
 
@@ -333,14 +365,29 @@ window.VOICECARE_SUPABASE = (() => {
   }
 
   function listenForNativeAuth() {
+    if (nativeListenerBound) return;
     const App = window.Capacitor?.Plugins?.App;
     if (!App?.addListener) return;
+    nativeListenerBound = true;
     App.addListener('appUrlOpen', (event) => {
       const url = event?.url || '';
       if (url.startsWith('in.voicecare.app://')) {
         completeNativeSignIn(url).catch((err) => console.warn('[VoiceCare Supabase] Deep link:', err.message));
       }
     });
+
+    const Browser = window.Capacitor?.Plugins?.Browser;
+    if (Browser?.addListener) {
+      Browser.addListener('browserFinished', () => {
+        if (!pendingNativeAuth) return;
+        setTimeout(() => {
+          if (pendingNativeAuth) {
+            pendingNativeAuth.reject(new Error('Google sign-in was cancelled.'));
+            pendingNativeAuth = null;
+          }
+        }, 1500);
+      });
+    }
   }
 
   /**
@@ -450,7 +497,9 @@ window.VOICECARE_SUPABASE = (() => {
     onPasswordRecovery,
     signInWithGoogle,
     restoreSession,
+    signOut,
     syncSummaryToCloud,
+    deleteCloudSummary,
     loadCloudSummaries
   };
 })();

@@ -229,7 +229,7 @@ function buildDemoFallbackSummary(patientText, language) {
     .filter((s) => s.length > 2);
 
   const durationMatch = patientText.match(
-    /(\b\d+\s*(?:day|days|week|weeks|month|months|year|years|hour|hours)\b|\bsince\s+(?:yesterday|last\s+\w+|morning|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|कल से|परसों से|दिनों से|हफ्ते से|ದಿನಗಳಿಂದ|ವಾರದಿಂದ|ನಿನ್ನೆಯಿಂದ)/i
+    /(\b\d+\s*(?:day|days|week|weeks|month|months|year|years|hour|hours)\b|\bsince\s+(?:yesterday|last\s+\w+|morning|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|कल से|परसों से|दिनों से|दिन से|हफ्ते से|महिनों से|ದಿನಗಳಿಂದ|ದಿನದಿಂದ|ವಾರದಿಂದ|ತಿಂಗಳಿಂದ|ನಿನ್ನೆಯಿಂದ)/i
   );
 
   const severityMatch = patientText.match(
@@ -255,9 +255,13 @@ function buildDemoFallbackSummary(patientText, language) {
     'कल से': 'Since yesterday',
     'परसों से': 'Since day before yesterday',
     'दिनों से': 'For several days',
+    'दिन से': 'For a few days',
     'हफ्ते से': 'For a week',
+    'महिनों से': 'For months',
     'ದಿನಗಳಿಂದ': 'For several days',
+    'ದಿನದಿಂದ': 'For a day',
     'ವಾರದಿಂದ': 'For a week',
+    'ತಿಂಗಳಿಂದ': 'For months',
     'ನಿನ್ನೆಯಿಂದ': 'Since yesterday'
   };
   const durationText = durationEnglishMap[durationRaw] || durationRaw || NOT_MENTIONED;
@@ -460,6 +464,8 @@ async function generateHealthSummary({ patientText, language = 'en', extraNotes 
           if (!isSummaryEmpty(summary.summary)) {
             if (containsNonLatinScript(summary.summary) && !forceEnglishReminder) {
               forceEnglishReminder = true;
+              // Allow the strict English retry even if this happened on the final attempt
+              attempt -= 1;
               continue;
             }
             rememberWorkingModel(result.model);
@@ -690,11 +696,15 @@ async function transcribeAudio({ audioBase64, mimeType }) {
       // Some model tiers reject thinkingConfig: retry this model without it.
       if (result.status === 400 && withThinking) {
         withThinking = false;
+        attempt -= 1;
         continue;
       }
 
       if (!RETRYABLE_STATUS.has(result.status)) break;
       if (result.status === 503 || result.status === 404) break;
+      if (attempt < 2) {
+        await sleep(500 * attempt);
+      }
     }
   }
 

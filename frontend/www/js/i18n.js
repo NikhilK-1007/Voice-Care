@@ -31,7 +31,9 @@ window.VOICECARE_I18N = {
     inputPlaceholder:
       'Example: I have had fever and body pain since 3 days. I take blood pressure tablets every morning...',
     generateBtn: 'Generate Health Summary',
-    clearBtn: 'Clear Text',
+    clearBtn: 'Clear',
+    langContinueBtn: 'Continue to health description',
+    inputLangNote: 'You can type or edit in English, हिन्दी or ಕನ್ನಡ.',
     sampleHeading: 'Try a sample description (for demo testing):',
     sampleText:
       'I have had a dull headache and mild fever for 3 days, mostly in the evening. I also have diabetes and take Metformin 500mg after breakfast. I feel very tired when walking.',
@@ -70,7 +72,9 @@ window.VOICECARE_I18N = {
     inputPlaceholder:
       'उदाहरण: मुझे 3 दिनों से बुखार और शरीर में दर्द है। मैं रोज सुबह बीपी की गोली लेता हूँ...',
     generateBtn: 'हेल्थ समरी बनाएं',
-    clearBtn: 'टेक्स्ट साफ़ करें',
+    clearBtn: 'साफ़ करें',
+    langContinueBtn: 'आगे बढ़ें और समस्या बताएं',
+    inputLangNote: 'आप English, हिन्दी या ಕನ್ನಡ में टाइप या सुधार कर सकते हैं।',
     sampleHeading: 'डेमो टेस्ट के लिए उदाहरण वाक्य चुनें:',
     sampleText:
       'मुझे तीन दिन से हल्का बुखार और सिर में दर्द है, खासकर शाम के समय। मुझे शुगर की बीमारी है और मैं नाश्ते के बाद मेटफॉर्मिन की गोली लेता हूँ। चलने पर जल्दी थकान होती है।',
@@ -109,7 +113,9 @@ window.VOICECARE_I18N = {
     inputPlaceholder:
       'ಉದಾಹರಣೆ: ನನಗೆ 3 ದಿನಗಳಿಂದ ಜ್ವರ ಮತ್ತು ಮೈಕೈ ನೋವು ಇದೆ. ನಾನು ಪ್ರತಿದಿನ ಬೆಳಿಗ್ಗೆ ಬಿಪಿ ಮಾತ್ರೆ ತೆಗೆದುಕೊಳ್ಳುತ್ತೇನೆ...',
     generateBtn: 'ಆರೋಗ್ಯ ಸಾರಾಂಶ ರಚಿಸಿ',
-    clearBtn: 'ಪಠ್ಯ ಅಳಿಸಿ',
+    clearBtn: 'ಅಳಿಸಿ',
+    langContinueBtn: 'ಮುಂದುವರಿಸಿ ಮತ್ತು ಸಮಸ್ಯೆ ತಿಳಿಸಿ',
+    inputLangNote: 'ನೀವು English, हिन्दी ಅಥವಾ ಕನ್ನಡದಲ್ಲಿ ಟೈಪ್ ಅಥವಾ ತಿದ್ದುಪಡಿ ಮಾಡಬಹುದು.',
     sampleHeading: 'ಪರೀಕ್ಷೆಗಾಗಿ ಮಾದರಿ ವಿವರಣೆ ಪ್ರಯತ್ನಿಸಿ:',
     sampleText:
       'ನನಗೆ ಕಳೆದ ಮೂರು ದಿನಗಳಿಂದ ಸಂಜೆ ವೇಳೆ ಸಣ್ಣ ಜ್ವರ ಮತ್ತು ತಲೆನೋವು ಬರುತ್ತಿದೆ. ನನಗೆ ಸಕ್ಕರೆ ಕಾಯಿಲೆ ಇದ್ದು ಬೆಳಗಿನ ತಿಂಡಿಯ ನಂತರ ಮಾತ್ರೆ ತೆಗೆದುಕೊಳ್ಳುತ್ತೇನೆ. ನಡೆಯುವಾಗ ತುಂಬಾ ಸುಸ್ತಾಗುತ್ತದೆ.',

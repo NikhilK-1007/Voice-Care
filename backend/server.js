@@ -111,13 +111,14 @@ app.get('/api/health', (_req, res) => {
     apiKey !== 'your_gemini_api_key_here' &&
     !apiKey.startsWith('REPLACE_');
 
+  const chain = getModelChain();
   res.json({
     status: 'ok',
     service: 'VoiceCare Backend',
     geminiConfigured,
     demoFallbackEnabled: process.env.ALLOW_DEMO_FALLBACK !== 'false',
-    model: process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash',
-    modelChain: getModelChain(),
+    model: chain[0] || process.env.GEMINI_MODEL?.trim() || 'gemini-3.1-flash-lite',
+    modelChain: chain,
     timestamp: new Date().toISOString()
   });
 });
@@ -129,11 +130,13 @@ app.use('/api', transcribeRoutes);
 const frontendDir = path.join(__dirname, '..', 'frontend', 'www');
 app.use(express.static(frontendDir, { dotfiles: 'deny' }));
 
+// Return JSON 404 for all unknown /api/* endpoints regardless of HTTP verb
+app.all('/api/*', (_req, res) => {
+  return res.status(404).json({ success: false, error: 'API endpoint not found.' });
+});
+
 // Fallback to index.html for unknown non-API routes
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ success: false, error: 'API endpoint not found.' });
-  }
+app.get('*', (_req, res) => {
   return res.sendFile(path.join(frontendDir, 'index.html'));
 });
 

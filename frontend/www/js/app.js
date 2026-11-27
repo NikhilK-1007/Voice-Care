@@ -28,7 +28,9 @@
     user: window.VOICECARE_STORAGE.getUser(),
     accessibility: window.VOICECARE_STORAGE.getAccessibility(),
     currentEntry: null,
-    processingCancelled: false
+    activeRequestId: 0,
+    activeSummaryAbortController: null,
+    healthWarmed: false
   };
 
   // DOM helpers
@@ -84,7 +86,10 @@
   }
 
   function getInitials(name) {
-    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    const cleaned = String(name || '')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .trim();
+    const parts = cleaned.split(/\s+/).filter(Boolean);
     if (!parts.length) return 'VC';
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -106,6 +111,11 @@
     const avatarBtn = $('home-avatar-btn');
     if (avatarBtn) avatarBtn.textContent = getInitials(state.user?.name);
     $('home-subtitle').textContent = t.homeSubtitle;
+    const homeDescribeBtn = $('btn-home-describe');
+    if (homeDescribeBtn) {
+      const label = lang === 'en' || lang === 'auto' ? 'Start speaking' : t.voiceStart || 'Start speaking';
+      homeDescribeBtn.innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg> ${escapeHtml(label)}`;
+    }
     $('home-active-lang-label').textContent = t.nativeName;
     const settingsLangVal = $('settings-lang-value');
     if (settingsLangVal) settingsLangVal.textContent = t.nativeName;
@@ -124,6 +134,10 @@
     // "auto" means the patient may use any language; keep an English UI hint.
     inputBox.setAttribute('lang', lang === 'auto' ? 'en' : lang);
     inputBox.placeholder = t.inputPlaceholder;
+    const inputLangNote = $('input-lang-note');
+    if (inputLangNote && t.inputLangNote) inputLangNote.textContent = t.inputLangNote;
+    const langContinueBtn = $('btn-lang-continue');
+    if (langContinueBtn && t.langContinueBtn) langContinueBtn.textContent = t.langContinueBtn;
     $('btn-generate-summary').innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-sparkles"></use></svg> ${escapeHtml(t.generateBtn)}`;
     $('btn-clear-input').textContent = t.clearBtn;
     $('input-lang-indicator').textContent = t.nativeName;
@@ -143,6 +157,7 @@
       const cardLang = card.getAttribute('data-lang');
       const isSelected = cardLang === lang;
       card.classList.toggle('selected', isSelected);
+      card.setAttribute('aria-checked', String(isSelected));
       const badge = $(`lang-check-${cardLang}`);
       if (badge) badge.textContent = isSelected ? '✓ Selected' : 'Select';
     });
@@ -154,8 +169,15 @@
     if (screenName === 'home') {
       state.historyStack = [];
     } else if (pushHistory && state.currentScreen && state.currentScreen !== screenName) {
-      if (state.currentScreen !== 'splash' && state.currentScreen !== 'processing') {
-        state.historyStack.push(state.currentScreen);
+      const fromBottomTab = SCREENS[state.currentScreen]?.bottomNav && state.currentScreen !== 'home';
+      const toBottomTab = SCREENS[screenName]?.bottomNav && screenName !== 'home';
+      if (fromBottomTab && toBottomTab) {
+        // Switching between sibling bottom-nav tabs returns cleanly to Home on Back
+        state.historyStack = ['home'];
+      } else if (state.currentScreen !== 'splash' && state.currentScreen !== 'processing') {
+        if (state.historyStack[state.historyStack.length - 1] !== state.currentScreen) {
+          state.historyStack.push(state.currentScreen);
+        }
       }
     }
 
@@ -176,7 +198,13 @@
       btn.classList.toggle('active', btn.getAttribute('data-screen') === screenName);
     });
 
-    if (screenName === 'home') renderHomeStats();
+    if (screenName === 'home') {
+      renderHomeStats();
+      if (!state.healthWarmed) {
+        state.healthWarmed = true;
+        window.VOICECARE_API?.checkHealth?.().catch(() => {});
+      }
+    }
     if (screenName === 'reminders') renderReminders();
     if (screenName === 'history') renderHistory();
 
@@ -196,7 +224,7 @@
 
   function updateInputMeta() {
     const text = $('patient-input-box').value || '';
-    $('input-char-count').textContent = `${text.length} characters`;
+    $('input-char-count').textContent = `${text.length} / 5000 characters`;
     window.VOICECARE_STORAGE.setDraftText(text);
   }
 
@@ -216,9 +244,10 @@
       .map((row) => {
         let bodyHtml = '';
         if (row.type === 'list') {
-          bodyHtml = `<ul class="record-list">${(row.value || [])
-            .map((item) => `<li>${escapeHtml(item)}</li>`)
-            .join('')}</ul>`;
+          const items = Array.isArray(row.value) ? row.value.filter(Boolean) : [];
+          bodyHtml = items.length
+            ? `<ul class="record-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+            : `<p class="record-text">Not mentioned by patient</p>`;
         } else {
           bodyHtml = `<p class="record-text">${escapeHtml(row.value || 'Not mentioned by patient')}</p>`;
         }
@@ -296,8 +325,19 @@
     $('pdf-preview-body').innerHTML = buildSummarySectionHtml(entry.summary);
   }
 
+  function abortActiveSummaryRequest() {
+    state.activeRequestId += 1;
+    if (state.activeSummaryAbortController) {
+      state.activeSummaryAbortController.abort();
+      state.activeSummaryAbortController = null;
+    }
+  }
+
   async function runAiSummarization({ patientText, extraNotes = '', endpoint = 'summarize' }) {
-    state.processingCancelled = false;
+    abortActiveSummaryRequest();
+    const requestId = state.activeRequestId;
+    const controller = new AbortController();
+    state.activeSummaryAbortController = controller;
     navigate('processing');
 
     const step1 = $('proc-step-1');
@@ -315,12 +355,13 @@
         patientText,
         language: state.language,
         extraNotes,
-        endpoint
+        endpoint,
+        signal: controller.signal
       });
 
       clearTimeout(t1);
       clearTimeout(t2);
-      if (state.processingCancelled) return;
+      if (requestId !== state.activeRequestId) return;
 
       const langObj = window.VOICECARE_I18N[state.language] || window.VOICECARE_I18N.en;
       const now = new Date().toISOString();
@@ -347,9 +388,13 @@
     } catch (err) {
       clearTimeout(t1);
       clearTimeout(t2);
-      if (state.processingCancelled) return;
+      if (requestId !== state.activeRequestId || err?.name === 'AbortError') return;
       showToast(err.message || 'Failed to generate summary.');
       navigate('input', { pushHistory: false });
+    } finally {
+      if (state.activeSummaryAbortController === controller) {
+        state.activeSummaryAbortController = null;
+      }
     }
   }
 
@@ -493,7 +538,10 @@
 
     const container = $('history-list');
     if (!list.length) {
-      container.innerHTML = `<div class="empty-state">No saved summaries yet.</div>`;
+      const emptyMsg = query
+        ? 'No saved summaries match your search.'
+        : 'No saved summaries yet.';
+      container.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
       return;
     }
 
@@ -541,6 +589,8 @@
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-hist-del');
         window.VOICECARE_STORAGE.deleteHistoryEntry(id);
+        window.VOICECARE_SUPABASE?.deleteCloudSummary?.(state.user, id);
+        if (state.currentEntry?.id === id) state.currentEntry = null;
         renderHistory();
         showToast('Saved summary deleted.');
       });
@@ -644,6 +694,11 @@
       switchAuthTab('login');
     });
 
+    $('link-reset-to-login')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchAuthTab('login');
+    });
+
     $('btn-forgot-password')?.addEventListener('click', () => {
       const typedEmail = sanitizeInput($('login-email')?.value || '', 120);
       switchAuthTab('forgot');
@@ -735,10 +790,17 @@
         setAuthFeedback('login-error-box', 'Please enter your password.');
         return;
       }
+      const submitBtn = $('login-form').querySelector('[type="submit"]');
+      const originalText = submitBtn?.textContent || 'Sign in';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in…';
+      }
       try {
         const user = await window.VOICECARE_SUPABASE.signInWithEmail(email, password);
         state.user = user;
         window.VOICECARE_STORAGE.setUser(user, { rememberDays });
+        $('login-password').value = '';
         applyLanguage();
 
         const cloudSummaries = await window.VOICECARE_SUPABASE.loadCloudSummaries(user);
@@ -752,6 +814,11 @@
         const msg = err.message || 'Wrong email or password. Please try again.';
         setAuthFeedback('login-error-box', msg);
         showToast(msg);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
 
@@ -770,8 +837,26 @@
         setAuthFeedback('signup-error-box', 'Password must be at least 6 characters.');
         return;
       }
+      const submitBtn = $('signup-form').querySelector('[type="submit"]');
+      const originalText = submitBtn?.textContent || 'Sign up';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating account…';
+      }
       try {
         const user = await window.VOICECARE_SUPABASE.signUpWithEmail(email, password, name);
+        $('signup-password').value = '';
+        if (user.needsConfirmation) {
+          switchAuthTab('login');
+          if ($('login-email')) $('login-email').value = email;
+          setAuthFeedback(
+            'login-error-box',
+            'Account created! Please check your email to confirm, then sign in.',
+            true
+          );
+          showToast('Confirmation email sent!');
+          return;
+        }
         state.user = user;
         window.VOICECARE_STORAGE.setUser(user, { rememberDays: 30 });
         applyLanguage();
@@ -782,6 +867,11 @@
         const msg = err.message || 'Could not create account.';
         setAuthFeedback('signup-error-box', msg);
         showToast(msg);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       }
     });
 
@@ -828,7 +918,7 @@
 
       // If on processing screen, cancel and return to input
       if (state.currentScreen === 'processing') {
-        state.processingCancelled = true;
+        abortActiveSummaryRequest();
         navigate('input', { pushHistory: false });
         return true;
       }
@@ -929,9 +1019,22 @@
     });
 
     $('btn-generate-summary').addEventListener('click', () => {
+      if (window.VOICECARE_VOICE?.isRecording?.()) {
+        showToast('Tap the microphone to finish your recording first.');
+        return;
+      }
+      if (window.VOICECARE_VOICE?.isBusy?.()) {
+        showToast('Please wait while your recording is written down.');
+        return;
+      }
       const text = inputBox.value.trim();
       if (text.length < 3) {
         showToast('Please tap the mic to speak, or type your health concern first.');
+        inputBox.focus();
+        return;
+      }
+      if (text.length > 5000) {
+        showToast('Please keep your description under 5,000 characters.');
         inputBox.focus();
         return;
       }
@@ -941,7 +1044,7 @@
 
     // 6. AI Processing cancel
     $('btn-cancel-processing').addEventListener('click', () => {
-      state.processingCancelled = true;
+      abortActiveSummaryRequest();
       navigate('input', { pushHistory: false });
     });
 
@@ -952,7 +1055,10 @@
     });
 
     $('btn-regenerate-summary').addEventListener('click', () => {
-      if (!state.currentEntry?.patientText) return;
+      if (!state.currentEntry?.patientText) {
+        showToast('Original description is unavailable for regeneration.');
+        return;
+      }
       runAiSummarization({
         patientText: state.currentEntry.patientText,
         endpoint: 'regenerate'
@@ -966,7 +1072,10 @@
 
     // 8. Edit Summary Screen
     $('btn-edit-regenerate').addEventListener('click', () => {
-      if (!state.currentEntry?.patientText) return;
+      if (!state.currentEntry?.patientText) {
+        showToast('Original description is unavailable for regeneration.');
+        return;
+      }
       const extraNotes = $('edit-extra-notes').value.trim();
       runAiSummarization({
         patientText: state.currentEntry.patientText,
@@ -1016,7 +1125,9 @@
     $('btn-quick-confirm').addEventListener('click', () => {
       if (!state.currentEntry) return;
       state.currentEntry.confirmed = true;
+      state.currentEntry.updatedAt = new Date().toISOString();
       window.VOICECARE_STORAGE.saveHistoryEntry(state.currentEntry);
+      window.VOICECARE_SUPABASE?.syncSummaryToCloud?.(state.user, state.currentEntry);
       renderPdfPreview();
       showToast('Summary confirmed for sharing.');
     });
@@ -1059,7 +1170,7 @@
       if (!state.currentEntry) return;
       const text = window.VOICECARE_PDF.formatPlainTextSummary(state.currentEntry);
       try {
-        await navigator.clipboard.writeText(text);
+        await window.VOICECARE_PDF.copyTextSafe(text);
         showToast('Doctor-friendly summary copied!');
       } catch {
         showToast('Clipboard permission unavailable in this browser.');
@@ -1081,27 +1192,47 @@
       const timingTag = $('rem-timing-tag').value;
       const dosageNote = sanitizeInput($('rem-note').value, 120);
 
-      if (!name || !time) return;
+      if (!name) {
+        showToast('Please enter the medicine name.');
+        $('rem-name')?.focus();
+        return;
+      }
+      if (!time) {
+        showToast('Please select a reminder time.');
+        $('rem-time')?.focus();
+        return;
+      }
 
-      const reminder = {
-        id: `rem_${Date.now()}`,
-        name,
-        time,
-        timingTag,
-        dosageNote,
-        active: true
-      };
+      const submitBtn = $('reminder-form').querySelector('[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
 
-      const list = window.VOICECARE_STORAGE.getReminders();
-      list.unshift(reminder);
-      window.VOICECARE_STORAGE.saveReminders(list);
-      await window.VOICECARE_NOTIFICATIONS.scheduleReminder(reminder);
+      try {
+        const reminder = {
+          id: `rem_${Date.now()}`,
+          name,
+          time,
+          timingTag,
+          dosageNote,
+          active: true
+        };
 
-      $('reminder-form').reset();
-      $('rem-time').value = '08:00';
-      $('reminder-form').classList.add('hidden');
-      renderReminders();
-      showToast(`Medicine reminder added for ${name}`);
+        const list = window.VOICECARE_STORAGE.getReminders();
+        list.unshift(reminder);
+        window.VOICECARE_STORAGE.saveReminders(list);
+        const schedRes = await window.VOICECARE_NOTIFICATIONS.scheduleReminder(reminder);
+
+        $('reminder-form').reset();
+        $('rem-time').value = '08:00';
+        $('reminder-form').classList.add('hidden');
+        renderReminders();
+        if (schedRes && schedRes.scheduled === false && schedRes.reason === 'permission-denied') {
+          showToast(`Saved ${name}. Allow notifications in settings to hear alerts.`);
+        } else {
+          showToast(`Medicine reminder added for ${name}`);
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
     });
 
     // 11. History search
@@ -1145,10 +1276,18 @@
       });
     });
 
-    $('btn-logout').addEventListener('click', () => {
+    $('btn-logout').addEventListener('click', async () => {
+      abortActiveSummaryRequest();
+      await window.VOICECARE_SUPABASE?.signOut?.();
       window.VOICECARE_STORAGE.clearUser();
       state.user = null;
+      state.currentEntry = null;
       state.historyStack = [];
+      ['login-password', 'signup-password', 'reset-password', 'reset-password-confirm'].forEach((id) => {
+        const el = $(id);
+        if (el) el.value = '';
+      });
+      switchAuthTab('guest');
       navigate('auth', { pushHistory: false });
       showToast('Signed out.');
     });

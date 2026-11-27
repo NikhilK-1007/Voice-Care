@@ -293,18 +293,28 @@
                 <label class="field-label" for="reset-password">New password</label>
                 <div class="input-wrap">
                   <span class="input-icon-left"><svg class="icon icon-sm"><use href="#i-lock"></use></svg></span>
-                  <input id="reset-password" class="input" type="password" maxlength="128" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" required />
+                  <input id="reset-password" class="input has-right-btn" type="password" maxlength="128" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" required />
+                  <button class="input-eye-btn" data-toggle-pw="reset-password" type="button" aria-label="Show password">
+                    <svg class="icon icon-sm"><use href="#i-eye"></use></svg>
+                  </button>
                 </div>
               </div>
               <div class="field">
                 <label class="field-label" for="reset-password-confirm">Confirm new password</label>
                 <div class="input-wrap">
                   <span class="input-icon-left"><svg class="icon icon-sm"><use href="#i-lock"></use></svg></span>
-                  <input id="reset-password-confirm" class="input" type="password" maxlength="128" placeholder="Confirm new password" minlength="6" autocomplete="new-password" required />
+                  <input id="reset-password-confirm" class="input has-right-btn" type="password" maxlength="128" placeholder="Confirm new password" minlength="6" autocomplete="new-password" required />
+                  <button class="input-eye-btn" data-toggle-pw="reset-password-confirm" type="button" aria-label="Show password">
+                    <svg class="icon icon-sm"><use href="#i-eye"></use></svg>
+                  </button>
                 </div>
               </div>
               <button id="btn-update-password" class="btn btn-primary" type="submit">Update password</button>
             </form>
+
+            <p class="auth-switch-note">
+              <button id="link-reset-to-login" class="auth-link" type="button">Back to Sign in</button>
+            </p>
           </section>
         </div>
       </section>
@@ -482,6 +492,7 @@
           id="patient-input-box"
           class="textarea input-box"
           lang="en"
+          maxlength="5000"
           inputmode="text"
           enterkeyhint="done"
           autocapitalize="sentences"
@@ -529,6 +540,16 @@
         <div id="summary-emergency-banner" class="alert alert-danger" style="display: none;">
           <p class="alert-title">Urgent care guidance</p>
           <p id="summary-emergency-text"></p>
+          <div class="emergency-banner-links no-print">
+            <a class="emergency-banner-call" href="tel:108">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-phone"></use></svg>
+              Call 108 Ambulance
+            </a>
+            <a class="emergency-banner-call" href="tel:112">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-phone"></use></svg>
+              Call 112 Emergency
+            </a>
+          </div>
         </div>
 
         <div class="summary-header-row">
@@ -638,7 +659,7 @@
 
       <!-- 9 · REPORT -->
       <section id="screen-pdf" class="screen" aria-label="Report preview">
-        <div class="page-head">
+        <div class="page-head no-print">
           <p class="eyebrow">Ready for consultation</p>
           <h2 class="page-title">PDF report &amp; share</h2>
         </div>
@@ -885,7 +906,6 @@
   <script src="js/config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/storage.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js"></script>
   <script src="js/api.js"></script>
   <script src="js/voice.js"></script>

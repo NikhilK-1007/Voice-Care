@@ -95,7 +95,6 @@ Voice-Care/
 │           ├── pdf.js            # Offline jsPDF generation & Capacitor Share
 │           ├── notifications.js  # Local medicine reminder alerts
 │           └── app.js            # Navigation & screen controllers
-├── HANDOFF.md                    # Technical architecture & handoff notes
 └── README.md
 ```
 

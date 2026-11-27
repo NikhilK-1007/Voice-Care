@@ -125,7 +125,9 @@
   function navigate(screenName, { pushHistory = true } = {}) {
     if (!SCREENS[screenName]) return;
 
-    if (pushHistory && state.currentScreen && state.currentScreen !== screenName) {
+    if (screenName === 'home') {
+      state.historyStack = [];
+    } else if (pushHistory && state.currentScreen && state.currentScreen !== screenName) {
       if (state.currentScreen !== 'splash' && state.currentScreen !== 'processing') {
         state.historyStack.push(state.currentScreen);
       }
@@ -650,7 +652,16 @@
 
     // Topbar Back & Language Pill
     function goBack() {
-      // If modal or processing screen, cancel
+      // On root screens (Home, Auth, Splash), do not navigate elsewhere — exit app
+      if (
+        state.currentScreen === 'home' ||
+        state.currentScreen === 'auth' ||
+        state.currentScreen === 'splash'
+      ) {
+        return false;
+      }
+
+      // If on processing screen, cancel and return to input
       if (state.currentScreen === 'processing') {
         state.processingCancelled = true;
         navigate('input', { pushHistory: false });
@@ -664,31 +675,20 @@
       }
 
       // If on any sub-screen without history, return to home
-      if (state.currentScreen !== 'home' && state.currentScreen !== 'splash' && state.currentScreen !== 'auth') {
-        navigate('home', { pushHistory: false });
-        return true;
-      }
-
-      return false; // Already on root screen
+      navigate('home', { pushHistory: false });
+      return true;
     }
 
     $('btn-back')?.addEventListener('click', goBack);
 
     // Native Android Hardware / Gesture Back Button handling
-    let lastBackPressTime = 0;
-    async function handleHardwareBack() {
+    function handleHardwareBack() {
       const handled = goBack();
       if (handled) return;
 
-      // Double press back within 2 seconds to exit app
-      const now = Date.now();
-      if (now - lastBackPressTime < 2000) {
-        if (window.Capacitor?.Plugins?.App) {
-          window.Capacitor.Plugins.App.exitApp();
-        }
-      } else {
-        lastBackPressTime = now;
-        showToast('Press back again to exit.');
+      // Exit app immediately when pressing back on Home / root screen
+      if (window.Capacitor?.Plugins?.App) {
+        window.Capacitor.Plugins.App.exitApp();
       }
     }
 

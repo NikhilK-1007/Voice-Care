@@ -54,48 +54,67 @@ window.VOICECARE_SUPABASE = (() => {
       throw new Error('Could not connect to Supabase service. Check internet connection.');
     }
 
-    // Try signing in
-    const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({
+    const { data, error } = await sb.auth.signInWithPassword({
       email,
       password
     });
 
-    if (!signInError && signInData?.user) {
+    if (error) {
+      if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials or switch to Sign up.');
+      }
+      throw new Error(error.message);
+    }
+
+    if (data?.user) {
       return {
-        uid: signInData.user.id,
-        name: signInData.user.user_metadata?.full_name || email.split('@')[0],
-        email: signInData.user.email,
+        uid: data.user.id,
+        name: data.user.user_metadata?.full_name || email.split('@')[0],
+        email: data.user.email,
         mode: 'supabase'
       };
     }
 
-    // If account doesn't exist, automatically sign up
-    if (signInError && (signInError.message.includes('Invalid login credentials') || signInError.status === 400)) {
-      const { data: signUpData, error: signUpError } = await sb.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: email.split('@')[0]
-          }
-        }
-      });
+    throw new Error('Sign in failed. Please try again.');
+  }
 
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
-
-      if (signUpData?.user) {
-        return {
-          uid: signUpData.user.id,
-          name: email.split('@')[0],
-          email: signUpData.user.email,
-          mode: 'supabase'
-        };
-      }
+  async function signUpWithEmail(email, password, fullName = '') {
+    if (!isConfigured()) {
+      throw new Error('Supabase is not configured yet. Please use Continue as Guest.');
     }
 
-    throw new Error(signInError ? signInError.message : 'Login failed. Please check your credentials.');
+    const sb = await getClient();
+    if (!sb) {
+      throw new Error('Could not connect to Supabase service. Check internet connection.');
+    }
+
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName.trim() || email.split('@')[0]
+        }
+      }
+    });
+
+    if (error) {
+      if (error.message.includes('already registered')) {
+        throw new Error('An account already exists with this email. Please switch to Sign in.');
+      }
+      throw new Error(error.message);
+    }
+
+    if (data?.user) {
+      return {
+        uid: data.user.id,
+        name: fullName.trim() || email.split('@')[0],
+        email: data.user.email,
+        mode: 'supabase'
+      };
+    }
+
+    throw new Error('Sign up failed. Please try again.');
   }
 
   async function syncSummaryToCloud(user, entry) {
@@ -352,6 +371,7 @@ window.VOICECARE_SUPABASE = (() => {
     isConfigured,
     getClient,
     signInWithEmail,
+    signUpWithEmail,
     signInWithGoogle,
     restoreSession,
     syncSummaryToCloud,

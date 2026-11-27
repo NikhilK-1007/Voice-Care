@@ -468,28 +468,44 @@
       showToast(`Welcome, ${state.user.name}!`);
     });
 
-    // Guest mode / Sign in tabs
+    // Guest mode / Sign in / Sign up tabs
     const authTabs = document.querySelectorAll('[data-auth-tab]');
     const guestPanel = $('auth-panel-guest');
     const loginPanel = $('auth-panel-login');
+    const signupPanel = $('auth-panel-signup');
+
+    function switchAuthTab(target) {
+      authTabs.forEach((tab) => {
+        const isActive = tab.getAttribute('data-auth-tab') === target;
+        tab.classList.toggle('is-active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+      });
+
+      guestPanel.classList.toggle('hidden', target !== 'guest');
+      loginPanel.classList.toggle('hidden', target !== 'login');
+      signupPanel.classList.toggle('hidden', target !== 'signup');
+
+      if (target === 'login') {
+        setTimeout(() => $('login-email')?.focus(), 120);
+      } else if (target === 'signup') {
+        setTimeout(() => $('signup-email')?.focus(), 120);
+      }
+    }
 
     authTabs.forEach((tab) => {
       tab.addEventListener('click', () => {
-        const target = tab.getAttribute('data-auth-tab');
-
-        authTabs.forEach((other) => {
-          const isActive = other === tab;
-          other.classList.toggle('is-active', isActive);
-          other.setAttribute('aria-selected', String(isActive));
-        });
-
-        guestPanel.classList.toggle('hidden', target !== 'guest');
-        loginPanel.classList.toggle('hidden', target !== 'login');
-
-        if (target === 'login') {
-          setTimeout(() => $('login-email').focus(), 120);
-        }
+        switchAuthTab(tab.getAttribute('data-auth-tab'));
       });
+    });
+
+    $('link-to-signup')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchAuthTab('signup');
+    });
+
+    $('link-to-login')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchAuthTab('login');
     });
 
     $('login-form').addEventListener('submit', async (e) => {
@@ -497,7 +513,7 @@
       const email = $('login-email').value.trim();
       const password = $('login-password').value;
       if (!email || !password) {
-        showToast('Please enter email and password, or tap Continue as Guest.');
+        showToast('Please enter your email and password.');
         return;
       }
       try {
@@ -519,10 +535,32 @@
       }
     });
 
-    // Google sign-in (Supabase OAuth). Resolves after the browser round-trip on
-    // Android, or after the page reload on the web build.
-    const googleButton = $('btn-google-signin');
-    if (googleButton) {
+    $('signup-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('signup-name').value.trim();
+      const email = $('signup-email').value.trim();
+      const password = $('signup-password').value;
+      if (!email || !password) {
+        showToast('Please enter your email and choose a password.');
+        return;
+      }
+      try {
+        const user = await window.VOICECARE_SUPABASE.signUpWithEmail(email, password, name);
+        state.user = user;
+        window.VOICECARE_STORAGE.setUser(user);
+        applyLanguage();
+
+        navigate('home', { pushHistory: false });
+        showToast(`Account created! Welcome, ${user.name}!`);
+      } catch (err) {
+        showToast(err.message);
+      }
+    });
+
+    // Google sign-in / sign-up (Supabase OAuth).
+    ['btn-google-signin', 'btn-google-signup'].forEach((id) => {
+      const googleButton = $(id);
+      if (!googleButton) return;
       googleButton.addEventListener('click', async () => {
         googleButton.disabled = true;
         const originalLabel = googleButton.innerHTML;
@@ -547,16 +585,62 @@
           googleButton.innerHTML = originalLabel;
         }
       });
-    }
+    });
 
     // Topbar Back & Language Pill
-    $('btn-back').addEventListener('click', () => {
-      const prev = state.historyStack.pop();
-      if (prev) {
-        navigate(prev, { pushHistory: false });
-      } else {
-        navigate('home', { pushHistory: false });
+    function goBack() {
+      // If modal or processing screen, cancel
+      if (state.currentScreen === 'processing') {
+        state.processingCancelled = true;
+        navigate('input', { pushHistory: false });
+        return true;
       }
+
+      const prev = state.historyStack.pop();
+      if (prev && prev !== state.currentScreen) {
+        navigate(prev, { pushHistory: false });
+        return true;
+      }
+
+      // If on any sub-screen without history, return to home
+      if (state.currentScreen !== 'home' && state.currentScreen !== 'splash' && state.currentScreen !== 'auth') {
+        navigate('home', { pushHistory: false });
+        return true;
+      }
+
+      return false; // Already on root screen
+    }
+
+    $('btn-back')?.addEventListener('click', goBack);
+
+    // Native Android Hardware / Gesture Back Button handling
+    let lastBackPressTime = 0;
+    async function handleHardwareBack() {
+      const handled = goBack();
+      if (handled) return;
+
+      // Double press back within 2 seconds to exit app
+      const now = Date.now();
+      if (now - lastBackPressTime < 2000) {
+        if (window.Capacitor?.Plugins?.App) {
+          window.Capacitor.Plugins.App.exitApp();
+        }
+      } else {
+        lastBackPressTime = now;
+        showToast('Press back again to exit.');
+      }
+    }
+
+    if (window.Capacitor?.Plugins?.App) {
+      window.Capacitor.Plugins.App.addListener('backButton', () => {
+        handleHardwareBack();
+      });
+    }
+
+    // Also support standard browser popstate
+    window.addEventListener('popstate', (e) => {
+      e.preventDefault();
+      goBack();
     });
 
     $('btn-lang-pill').addEventListener('click', () => navigate('language'));

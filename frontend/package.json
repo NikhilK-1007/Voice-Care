@@ -15,7 +15,7 @@
     "@capacitor/filesystem": "^6.0.1",
     "@capacitor/local-notifications": "^6.1.1",
     "@capacitor/share": "^6.0.2",
-    "jspdf": "^2.5.2"
+    "jspdf": "^4.2.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0"

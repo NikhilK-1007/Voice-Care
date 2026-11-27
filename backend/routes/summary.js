@@ -44,6 +44,8 @@ async function handleSummarize(req, res) {
       extraNotes: safeExtraNotes
     });
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
     return res.json({
       success: true,
       data: result

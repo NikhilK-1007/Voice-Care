@@ -61,7 +61,7 @@ window.VOICECARE_SUPABASE = (() => {
 
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
-        throw new Error('Invalid email or password. Please check your credentials or switch to Sign up.');
+        throw new Error('Wrong email or password. Please try again or tap Forgot password.');
       }
       throw new Error(error.message);
     }
@@ -76,6 +76,23 @@ window.VOICECARE_SUPABASE = (() => {
     }
 
     throw new Error('Sign in failed. Please try again.');
+  }
+
+  async function resetPassword(email) {
+    if (!isConfigured()) {
+      throw new Error('Account service is not configured yet.');
+    }
+
+    const sb = await getClient();
+    if (!sb) {
+      throw new Error('Could not connect to account service. Check internet connection.');
+    }
+
+    const { error } = await sb.auth.resetPasswordForEmail(email);
+    if (error) {
+      throw new Error(error.message);
+    }
+    return true;
   }
 
   async function signUpWithEmail(email, password, fullName = '') {
@@ -372,6 +389,7 @@ window.VOICECARE_SUPABASE = (() => {
     getClient,
     signInWithEmail,
     signUpWithEmail,
+    resetPassword,
     signInWithGoogle,
     restoreSession,
     syncSummaryToCloud,

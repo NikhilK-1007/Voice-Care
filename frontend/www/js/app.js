@@ -52,6 +52,13 @@
       .replace(/'/g, '&#39;');
   }
 
+  function sanitizeInput(value, maxLen = 200) {
+    return String(value ?? '')
+      .replace(/[\u0000-\u001F\u007F]/g, ' ')
+      .trim()
+      .slice(0, maxLen);
+  }
+
   function applyAccessibility() {
     const acc = state.accessibility;
     document.body.classList.remove('text-standard', 'text-large', 'text-xl');
@@ -456,7 +463,7 @@
 
     // 2. Auth / Guest Demo
     $('btn-guest-demo').addEventListener('click', () => {
-      const enteredName = $('guest-name-input').value.trim();
+      const enteredName = sanitizeInput($('guest-name-input').value, 80);
       state.user = {
         uid: 'guest-demo',
         name: enteredName || 'Guest Patient',
@@ -468,18 +475,36 @@
       showToast(`Welcome, ${state.user.name}!`);
     });
 
-    // Guest mode / Sign in / Sign up tabs
+    // Guest mode / Sign in (side-by-side) + Sign up view
     const authTabs = document.querySelectorAll('[data-auth-tab]');
     const guestPanel = $('auth-panel-guest');
     const loginPanel = $('auth-panel-login');
     const signupPanel = $('auth-panel-signup');
 
+    function setAuthFeedback(boxId, message, isSuccess = false) {
+      const box = $(boxId);
+      if (!box) return;
+      if (!message) {
+        box.textContent = '';
+        box.classList.add('hidden');
+        box.classList.remove('is-success');
+        return;
+      }
+      box.textContent = message;
+      box.classList.remove('hidden');
+      box.classList.toggle('is-success', isSuccess);
+    }
+
     function switchAuthTab(target) {
+      const activeTopTab = target === 'signup' ? 'login' : target;
       authTabs.forEach((tab) => {
-        const isActive = tab.getAttribute('data-auth-tab') === target;
+        const isActive = tab.getAttribute('data-auth-tab') === activeTopTab;
         tab.classList.toggle('is-active', isActive);
         tab.setAttribute('aria-selected', String(isActive));
       });
+
+      setAuthFeedback('login-error-box', '');
+      setAuthFeedback('signup-error-box', '');
 
       guestPanel.classList.toggle('hidden', target !== 'guest');
       loginPanel.classList.toggle('hidden', target !== 'login');
@@ -508,21 +533,47 @@
       switchAuthTab('login');
     });
 
+    $('btn-forgot-password')?.addEventListener('click', async () => {
+      const email = sanitizeInput($('login-email').value, 120);
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setAuthFeedback('login-error-box', 'Enter your email address first, then tap Forgot password.');
+        $('login-email')?.focus();
+        return;
+      }
+      try {
+        await window.VOICECARE_SUPABASE.resetPassword(email);
+        setAuthFeedback(
+          'login-error-box',
+          `Password reset link sent to ${email}. Check your inbox.`,
+          true
+        );
+        showToast('Password reset email sent!');
+      } catch (err) {
+        setAuthFeedback('login-error-box', err.message || 'Could not send reset email.');
+      }
+    });
+
     $('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = $('login-email').value.trim();
+      setAuthFeedback('login-error-box', '');
+      const email = sanitizeInput($('login-email').value, 120);
       const password = $('login-password').value;
-      if (!email || !password) {
-        showToast('Please enter your email and password.');
+      const rememberDays = $('login-remember')?.checked ? 30 : 1;
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setAuthFeedback('login-error-box', 'Please enter a valid email address.');
+        return;
+      }
+      if (!password) {
+        setAuthFeedback('login-error-box', 'Please enter your password.');
         return;
       }
       try {
         const user = await window.VOICECARE_SUPABASE.signInWithEmail(email, password);
         state.user = user;
-        window.VOICECARE_STORAGE.setUser(user);
+        window.VOICECARE_STORAGE.setUser(user, { rememberDays });
         applyLanguage();
 
-        // Also fetch and merge past summaries from Supabase cloud
         const cloudSummaries = await window.VOICECARE_SUPABASE.loadCloudSummaries(user);
         if (cloudSummaries.length > 0) {
           cloudSummaries.forEach((s) => window.VOICECARE_STORAGE.saveHistoryEntry(s));
@@ -531,29 +582,39 @@
         navigate('home', { pushHistory: false });
         showToast(`Welcome back, ${user.name}!`);
       } catch (err) {
-        showToast(err.message);
+        const msg = err.message || 'Wrong email or password. Please try again.';
+        setAuthFeedback('login-error-box', msg);
+        showToast(msg);
       }
     });
 
     $('signup-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = $('signup-name').value.trim();
-      const email = $('signup-email').value.trim();
+      setAuthFeedback('signup-error-box', '');
+      const name = sanitizeInput($('signup-name').value, 80);
+      const email = sanitizeInput($('signup-email').value, 120);
       const password = $('signup-password').value;
-      if (!email || !password) {
-        showToast('Please enter your email and choose a password.');
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setAuthFeedback('signup-error-box', 'Please enter a valid email address.');
+        return;
+      }
+      if (!password || password.length < 6) {
+        setAuthFeedback('signup-error-box', 'Password must be at least 6 characters.');
         return;
       }
       try {
         const user = await window.VOICECARE_SUPABASE.signUpWithEmail(email, password, name);
         state.user = user;
-        window.VOICECARE_STORAGE.setUser(user);
+        window.VOICECARE_STORAGE.setUser(user, { rememberDays: 30 });
         applyLanguage();
 
         navigate('home', { pushHistory: false });
         showToast(`Account created! Welcome, ${user.name}!`);
       } catch (err) {
-        showToast(err.message);
+        const msg = err.message || 'Could not create account.';
+        setAuthFeedback('signup-error-box', msg);
+        showToast(msg);
       }
     });
 

@@ -63,6 +63,8 @@ router.post('/transcribe', async (req, res) => {
       mimeType: safeMime
     });
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
     return res.json({ success: true, data: result });
   } catch (error) {
     console.error('[VoiceCare API] Transcription error:', error.message);

@@ -1151,6 +1151,95 @@ svg.icon-sm { width: 15px; height: 15px; stroke-width: 1.8; }
 
 .splash-actions { width: 100%; max-width: 320px; }
 
+/* ----------------------------------------------------------- auth card --- */
+
+.auth-card {
+  padding: 26px 22px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.auth-card-head {
+  margin-bottom: 18px;
+}
+
+.auth-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 4px;
+  font-size: 0.86rem;
+}
+
+.auth-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.auth-check input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+.auth-link {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.auth-feedback {
+  padding: 11px 13px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.auth-feedback.is-success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.auth-switch-note {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--ink-3);
+}
+
 .splash-note {
   margin: 14px 0 0;
   font-size: 0.78rem;

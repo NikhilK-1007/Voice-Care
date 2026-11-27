@@ -12,19 +12,61 @@ const { getModelChain } = require('./services/geminiService');
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// Security headers (allow inline styles/scripts needed by local mobile web assets)
+app.disable('x-powered-by');
+// Trust Render's reverse proxy so rate-limiting applies per client IP
+app.set('trust proxy', 1);
+
+// Security headers with strict CSP compatible with Capacitor & Supabase
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: [
+          "'self'",
+          'https://voice-care-t4gz.onrender.com',
+          'https://jrszguszetsejyxpcncw.supabase.co',
+          'wss://jrszguszetsejyxpcncw.supabase.co'
+        ],
+        mediaSrc: ["'self'", 'blob:'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"]
+      }
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     crossOriginEmbedderPolicy: false
   })
 );
 
-// Configure CORS for web browser + Capacitor Android/iOS origins
-const allowedOrigins = process.env.ALLOWED_ORIGINS || '*';
+// Configure CORS for web browser, Render, and Capacitor Android/iOS origins
+const rawAllowed = process.env.ALLOWED_ORIGINS?.trim();
+const DEFAULT_SAFE_ORIGINS = [
+  'https://localhost',
+  'capacitor://localhost',
+  'https://voice-care-t4gz.onrender.com'
+];
+
 app.use(
   cors({
-    origin: allowedOrigins === '*' ? true : allowedOrigins.split(',').map((o) => o.trim()),
+    origin(origin, callback) {
+      // Allow native mobile / curl / same-origin requests with no Origin header
+      if (!origin) return callback(null, true);
+      if (rawAllowed && rawAllowed !== '*') {
+        const list = rawAllowed.split(',').map((o) => o.trim());
+        return callback(null, list.includes(origin));
+      }
+      if (
+        DEFAULT_SAFE_ORIGINS.includes(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error('Origin not allowed by CORS'));
+    },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
   })
@@ -47,7 +89,19 @@ const apiLimiter = rateLimit({
   }
 });
 
+const transcribeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Too many voice recordings. Please wait a minute and try again.'
+  }
+});
+
 app.use('/api', apiLimiter);
+app.use('/api/transcribe', transcribeLimiter);
 
 // Health check endpoint (never exposes secrets)
 app.get('/api/health', (_req, res) => {
@@ -71,16 +125,25 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', summaryRoutes);
 app.use('/api', transcribeRoutes);
 
-// Serve the mobile web frontend from ../frontend/www for easy local development
+// Serve only the public mobile web frontend (deny dotfiles like .env)
 const frontendDir = path.join(__dirname, '..', 'frontend', 'www');
-app.use(express.static(frontendDir));
+app.use(express.static(frontendDir, { dotfiles: 'deny' }));
 
 // Fallback to index.html for unknown non-API routes
-app.get('*', (req, res, next) => {
+app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ success: false, error: 'API endpoint not found.' });
   }
   return res.sendFile(path.join(frontendDir, 'index.html'));
+});
+
+// Production error handler (never leak stack traces or internal details)
+app.use((err, _req, res, _next) => {
+  if (err && err.message === 'Origin not allowed by CORS') {
+    return res.status(403).json({ success: false, error: 'Origin not allowed.' });
+  }
+  console.error('[VoiceCare Server Error]:', err?.message || 'Unknown error');
+  return res.status(500).json({ success: false, error: 'Internal server error.' });
 });
 
 if (require.main === module) {

@@ -68,12 +68,6 @@
 
       <!-- 2 · SIGN IN -->
       <section id="screen-auth" class="screen" aria-label="Sign in">
-        <div class="page-head">
-          <p class="eyebrow">Welcome</p>
-          <h2 class="page-title">Prepare for your doctor visit in minutes</h2>
-          <p class="page-sub">Choose how you want to start. You can create an account later.</p>
-        </div>
-
         <div class="segmented" role="tablist" aria-label="How to start">
           <button
             id="tab-guest"
@@ -97,33 +91,21 @@
           >
             Sign in
           </button>
-          <button
-            id="tab-signup"
-            class="segment"
-            data-auth-tab="signup"
-            role="tab"
-            aria-selected="false"
-            aria-controls="auth-panel-signup"
-            type="button"
-          >
-            Sign up
-          </button>
         </div>
 
         <div id="auth-panel-guest" class="auth-panel" role="tabpanel" aria-labelledby="tab-guest">
-          <section class="panel">
-            <div class="panel-head">
-              <h3 class="panel-title">Start without an account</h3>
-              <p class="panel-sub">
-                Nothing to set up. Your summaries stay on this device.
-              </p>
+          <section class="panel auth-card">
+            <div class="auth-card-head">
+              <p class="auth-eyebrow">No account needed</p>
+              <h2 class="auth-title">Guest mode</h2>
+              <p class="panel-sub">Your summaries stay privately on this phone.</p>
             </div>
             <label class="field-label" for="guest-name-input">
               Your name <span class="optional">optional</span>
             </label>
-            <input id="guest-name-input" class="input" type="text" placeholder="e.g. Ramesh Kumar" autocomplete="name" />
+            <input id="guest-name-input" class="input" type="text" maxlength="80" placeholder="e.g. Ramesh Kumar" autocomplete="name" />
             <p class="panel-sub" style="margin-top: 8px;">Printed on the report you hand to your doctor.</p>
-            <button id="btn-guest-demo" class="btn btn-primary" type="button" style="margin-top: 14px;">
+            <button id="btn-guest-demo" class="btn btn-primary" type="button" style="margin-top: 16px;">
               Continue as guest
             </button>
           </section>
@@ -135,83 +117,85 @@
         </div>
 
         <div id="auth-panel-login" class="auth-panel hidden" role="tabpanel" aria-labelledby="tab-login">
-          <section class="panel">
-            <div class="panel-head">
-              <h3 class="panel-title">Welcome back</h3>
-              <p class="panel-sub">
-                Sign in to your existing VoiceCare account.
-              </p>
+          <section class="panel auth-card">
+            <div class="auth-card-head">
+              <p class="auth-eyebrow">Please enter your details</p>
+              <h2 class="auth-title">Welcome back</h2>
             </div>
-            <form id="login-form" class="stack">
+
+            <div id="login-error-box" class="auth-feedback hidden" role="alert"></div>
+
+            <form id="login-form" class="stack" novalidate>
               <div class="field">
-                <label class="field-label" for="login-email">Email</label>
-                <input id="login-email" class="input" type="email" placeholder="patient@example.com" required />
+                <input id="login-email" class="input" type="email" maxlength="120" placeholder="Email address" autocomplete="email" required />
               </div>
               <div class="field">
-                <label class="field-label" for="login-password">Password</label>
-                <input id="login-password" class="input" type="password" placeholder="••••••••" required />
+                <input id="login-password" class="input" type="password" maxlength="128" placeholder="Password" autocomplete="current-password" required />
               </div>
+
+              <div class="auth-row">
+                <label class="auth-check">
+                  <input id="login-remember" type="checkbox" checked />
+                  <span>Remember for 30 days</span>
+                </label>
+                <button id="btn-forgot-password" class="auth-link" type="button">Forgot password</button>
+              </div>
+
               <button class="btn btn-primary" type="submit">Sign in</button>
             </form>
 
-            <div class="divider" role="separator"><span>or</span></div>
-
-            <button id="btn-google-signin" class="btn btn-google" type="button">
+            <button id="btn-google-signin" class="btn btn-google" type="button" style="margin-top: 12px;">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.4z"/>
                 <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.2H3.1v2.6A10 10 0 0 0 12 22z"/>
                 <path fill="#FBBC05" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.5H3.1a10 10 0 0 0 0 9z"/>
                 <path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1z"/>
               </svg>
-              Continue with Google
+              Sign in with Google
             </button>
-          </section>
 
-          <p class="footnote">
-            Don't have an account? <a href="#" id="link-to-signup" style="color: var(--accent); font-weight: 600;">Sign up here</a>.
-          </p>
+            <p class="auth-switch-note">
+              Don't have an account? <button id="link-to-signup" class="auth-link" type="button">Sign up</button>
+            </p>
+          </section>
         </div>
 
-        <div id="auth-panel-signup" class="auth-panel hidden" role="tabpanel" aria-labelledby="tab-signup">
-          <section class="panel">
-            <div class="panel-head">
-              <h3 class="panel-title">Create an account</h3>
-              <p class="panel-sub">
-                Sign up to save and sync your summaries securely.
-              </p>
+        <div id="auth-panel-signup" class="auth-panel hidden" role="tabpanel">
+          <section class="panel auth-card">
+            <div class="auth-card-head">
+              <p class="auth-eyebrow">Please enter your details</p>
+              <h2 class="auth-title">Create an account</h2>
             </div>
-            <form id="signup-form" class="stack">
+
+            <div id="signup-error-box" class="auth-feedback hidden" role="alert"></div>
+
+            <form id="signup-form" class="stack" novalidate>
               <div class="field">
-                <label class="field-label" for="signup-name">Full name <span class="optional">optional</span></label>
-                <input id="signup-name" class="input" type="text" placeholder="e.g. Ramesh Kumar" autocomplete="name" />
+                <input id="signup-name" class="input" type="text" maxlength="80" placeholder="Full name (optional)" autocomplete="name" />
               </div>
               <div class="field">
-                <label class="field-label" for="signup-email">Email</label>
-                <input id="signup-email" class="input" type="email" placeholder="patient@example.com" required />
+                <input id="signup-email" class="input" type="email" maxlength="120" placeholder="Email address" autocomplete="email" required />
               </div>
               <div class="field">
-                <label class="field-label" for="signup-password">Password</label>
-                <input id="signup-password" class="input" type="password" placeholder="At least 6 characters" minlength="6" required />
+                <input id="signup-password" class="input" type="password" maxlength="128" placeholder="Password (min 6 characters)" minlength="6" autocomplete="new-password" required />
               </div>
-              <button class="btn btn-primary" type="submit">Create account</button>
+              <button class="btn btn-primary" type="submit">Sign up</button>
             </form>
 
-            <div class="divider" role="separator"><span>or</span></div>
-
-            <button id="btn-google-signup" class="btn btn-google" type="button">
+            <button id="btn-google-signup" class="btn btn-google" type="button" style="margin-top: 12px;">
               <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.4z"/>
                 <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.2H3.1v2.6A10 10 0 0 0 12 22z"/>
                 <path fill="#FBBC05" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.5H3.1a10 10 0 0 0 0 9z"/>
                 <path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.9 9.4 6.1 12 6.1z"/>
               </svg>
-              Continue with Google
+              Sign up with Google
             </button>
-          </section>
 
-          <p class="footnote">
-            Already have an account? <a href="#" id="link-to-login" style="color: var(--accent); font-weight: 600;">Sign in here</a>.
-          </p>
+            <p class="auth-switch-note">
+              Already have an account? <button id="link-to-login" class="auth-link" type="button">Sign in</button>
+            </p>
+          </section>
         </div>
       </section>
 

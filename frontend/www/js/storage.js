@@ -33,10 +33,18 @@ function safeWrite(key, value) {
 
 window.VOICECARE_STORAGE = {
   getUser() {
-    return safeRead(KEYS.USER, null);
+    const data = safeRead(KEYS.USER, null);
+    if (!data) return null;
+    if (data.expiresAt && Date.now() > data.expiresAt) {
+      localStorage.removeItem(KEYS.USER);
+      return null;
+    }
+    return data;
   },
-  setUser(user) {
-    safeWrite(KEYS.USER, user);
+  setUser(user, { rememberDays = 30 } = {}) {
+    if (!user) return;
+    const expiresAt = Date.now() + rememberDays * 24 * 60 * 60 * 1000;
+    safeWrite(KEYS.USER, { ...user, expiresAt });
   },
   clearUser() {
     localStorage.removeItem(KEYS.USER);

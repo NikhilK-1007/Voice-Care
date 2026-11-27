@@ -126,8 +126,17 @@ window.VOICECARE_VOICE = (() => {
   async function upload(blob) {
     setBusy(true);
     setStatus(strings().writing);
+    let audioBase64 = '';
     try {
-      const audioBase64 = await blobToBase64(blob);
+      const baseUrl = window.VOICECARE_CONFIG?.getApiBaseUrl?.() || '';
+      if (
+        /^http:\/\//i.test(baseUrl) &&
+        !/^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.)/i.test(baseUrl)
+      ) {
+        throw new Error('Insecure connection blocked. Voice data requires HTTPS.');
+      }
+
+      audioBase64 = await blobToBase64(blob);
       const data = await window.VOICECARE_API.transcribe({
         audioBase64,
         mimeType: blob.type || 'audio/webm'
@@ -142,6 +151,9 @@ window.VOICECARE_VOICE = (() => {
     } catch (error) {
       setStatus(error.message || strings().failed, true);
     } finally {
+      // Immediately clear raw audio data from memory after transcription
+      audioBase64 = '';
+      chunks = [];
       setBusy(false);
     }
   }

@@ -109,27 +109,24 @@ Voice-Care/
 
 ### Prerequisites
 - **Node.js v18+** ([nodejs.org](https://nodejs.org/))
-- **Google Gemini API Key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+- *(Optional)* **Google Gemini API Key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) — **not required to run**: the app starts without any secret keys using built-in demo fallback (or connects to the hosted backend).
 
-### 1️⃣ Start the Backend
+### 1️⃣ Start the Backend (Zero-Config / No Keys Required)
 ```bash
 cd backend
 npm install
+npm start     # Starts immediately at http://localhost:3000 (no .env required)
+npm test      # Runs automated validation & API tests (5 tests)
 ```
-Copy `backend/.env.example` to `backend/.env` and add your Gemini key:
+*(On Windows PowerShell, use `npm.cmd` if `npm.ps1` is blocked by execution policy.)*
+
+*(Optional)* To run your own local Gemini key instead of demo fallback, copy `backend/.env.example` to `backend/.env`:
 ```env
 PORT=3000
 GEMINI_API_KEY=your_actual_gemini_api_key
 GEMINI_MODEL=gemini-3.8-flash
 ALLOW_DEMO_FALLBACK=true
 ALLOWED_ORIGINS=*
-```
-*(On Windows PowerShell, use `npm.cmd` if `npm.ps1` is blocked by execution policy.)*
-
-Start the server and run tests:
-```bash
-npm start     # Serves API + web app at http://localhost:3000
-npm test      # Runs automated validation & API tests (5 tests)
 ```
 
 ### 2️⃣ Prepare Frontend Assets & Preview in Browser

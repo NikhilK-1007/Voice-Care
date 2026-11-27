@@ -12,6 +12,7 @@ window.VOICECARE_SUPABASE = (() => {
   // Deep link the Android app listens for after Google sign-in (see AndroidManifest.xml).
   const NATIVE_AUTH_REDIRECT = 'in.voicecare.app://auth-callback';
   let pendingNativeAuth = null;
+  let recoveryCallback = null;
 
   function isConfigured() {
     const cfg = window.VOICECARE_CONFIG?.SUPABASE_CONFIG;
@@ -88,11 +89,53 @@ window.VOICECARE_SUPABASE = (() => {
       throw new Error('Could not connect to account service. Check internet connection.');
     }
 
-    const { error } = await sb.auth.resetPasswordForEmail(email);
+    const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+    const redirectTo = isNative
+      ? NATIVE_AUTH_REDIRECT
+      : `${window.location.origin}${window.location.pathname}`;
+
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
     if (error) {
       throw new Error(error.message);
     }
     return true;
+  }
+
+  async function updatePassword(newPassword) {
+    if (!isConfigured()) {
+      throw new Error('Account service is not configured yet.');
+    }
+
+    const sb = await getClient();
+    if (!sb) {
+      throw new Error('Could not connect to account service. Check internet connection.');
+    }
+
+    const { data, error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data?.user) {
+      return toUser(data.user);
+    }
+    return null;
+  }
+
+  function onPasswordRecovery(callback) {
+    recoveryCallback = callback;
+    const params = parseAuthParams(window.location.href);
+    if (params.type === 'recovery' && typeof callback === 'function') {
+      callback();
+    }
+    getClient().then((sb) => {
+      if (!sb) return;
+      sb.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY' && typeof recoveryCallback === 'function') {
+          recoveryCallback();
+        }
+      });
+    });
   }
 
   async function signUpWithEmail(email, password, fullName = '') {
@@ -268,6 +311,19 @@ window.VOICECARE_SUPABASE = (() => {
     }
 
     const user = toUser(data.user);
+
+    if (params.type === 'recovery') {
+      try {
+        await window.Capacitor?.Plugins?.Browser?.close?.();
+      } catch {
+        // Ignore if browser already closed
+      }
+      if (typeof recoveryCallback === 'function') {
+        recoveryCallback();
+      }
+      return;
+    }
+
     window.VOICECARE_STORAGE?.setUser?.(user);
 
     if (pendingNativeAuth) {
@@ -390,6 +446,8 @@ window.VOICECARE_SUPABASE = (() => {
     signInWithEmail,
     signUpWithEmail,
     resetPassword,
+    updatePassword,
+    onPasswordRecovery,
     signInWithGoogle,
     restoreSession,
     syncSummaryToCloud,

@@ -477,11 +477,13 @@
       showToast(`Welcome, ${state.user.name}!`);
     });
 
-    // Guest mode / Sign in (side-by-side) + Sign up view
+    // Guest mode / Sign in (side-by-side) + Sign up / Forgot / Reset views
     const authTabs = document.querySelectorAll('[data-auth-tab]');
     const guestPanel = $('auth-panel-guest');
     const loginPanel = $('auth-panel-login');
     const signupPanel = $('auth-panel-signup');
+    const forgotPanel = $('auth-panel-forgot');
+    const resetPanel = $('auth-panel-reset');
 
     function setAuthFeedback(boxId, message, isSuccess = false) {
       const box = $(boxId);
@@ -498,7 +500,7 @@
     }
 
     function switchAuthTab(target) {
-      const activeTopTab = target === 'signup' ? 'login' : target;
+      const activeTopTab = target === 'guest' ? 'guest' : 'login';
       authTabs.forEach((tab) => {
         const isActive = tab.getAttribute('data-auth-tab') === activeTopTab;
         tab.classList.toggle('is-active', isActive);
@@ -507,15 +509,23 @@
 
       setAuthFeedback('login-error-box', '');
       setAuthFeedback('signup-error-box', '');
+      setAuthFeedback('forgot-error-box', '');
+      setAuthFeedback('reset-error-box', '');
 
       guestPanel.classList.toggle('hidden', target !== 'guest');
       loginPanel.classList.toggle('hidden', target !== 'login');
       signupPanel.classList.toggle('hidden', target !== 'signup');
+      forgotPanel?.classList.toggle('hidden', target !== 'forgot');
+      resetPanel?.classList.toggle('hidden', target !== 'reset');
 
       if (target === 'login') {
         setTimeout(() => $('login-email')?.focus(), 120);
       } else if (target === 'signup') {
         setTimeout(() => $('signup-email')?.focus(), 120);
+      } else if (target === 'forgot') {
+        setTimeout(() => $('forgot-email')?.focus(), 120);
+      } else if (target === 'reset') {
+        setTimeout(() => $('reset-password')?.focus(), 120);
       }
     }
 
@@ -535,24 +545,85 @@
       switchAuthTab('login');
     });
 
-    $('btn-forgot-password')?.addEventListener('click', async () => {
-      const email = sanitizeInput($('login-email').value, 120);
+    $('link-forgot-to-login')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      switchAuthTab('login');
+    });
+
+    $('btn-forgot-password')?.addEventListener('click', () => {
+      const typedEmail = sanitizeInput($('login-email')?.value || '', 120);
+      switchAuthTab('forgot');
+      if (typedEmail && $('forgot-email')) {
+        $('forgot-email').value = typedEmail;
+      }
+    });
+
+    $('forgot-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setAuthFeedback('forgot-error-box', '');
+      const email = sanitizeInput($('forgot-email').value, 120);
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        setAuthFeedback('login-error-box', 'Enter your email address first, then tap Forgot password.');
-        $('login-email')?.focus();
+        setAuthFeedback('forgot-error-box', 'Please enter a valid email address.');
+        $('forgot-email')?.focus();
         return;
       }
+      const btn = $('btn-send-reset');
+      if (btn) btn.disabled = true;
       try {
         await window.VOICECARE_SUPABASE.resetPassword(email);
         setAuthFeedback(
-          'login-error-box',
-          `Password reset link sent to ${email}. Check your inbox.`,
+          'forgot-error-box',
+          `Reset link sent to ${email}. Open the link in your email to choose a new password.`,
           true
         );
         showToast('Password reset email sent!');
       } catch (err) {
-        setAuthFeedback('login-error-box', err.message || 'Could not send reset email.');
+        setAuthFeedback('forgot-error-box', err.message || 'Could not send reset email.');
+      } finally {
+        if (btn) btn.disabled = false;
       }
+    });
+
+    $('reset-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setAuthFeedback('reset-error-box', '');
+      const newPassword = $('reset-password').value;
+      const confirmPassword = $('reset-password-confirm').value;
+
+      if (!newPassword || newPassword.length < 6) {
+        setAuthFeedback('reset-error-box', 'Password must be at least 6 characters.');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setAuthFeedback('reset-error-box', 'Passwords do not match.');
+        return;
+      }
+
+      const btn = $('btn-update-password');
+      if (btn) btn.disabled = true;
+      try {
+        const user = await window.VOICECARE_SUPABASE.updatePassword(newPassword);
+        if (user) {
+          state.user = user;
+          window.VOICECARE_STORAGE.setUser(user, { rememberDays: 30 });
+          applyLanguage();
+          navigate('home', { pushHistory: false });
+          showToast('Password updated! You are signed in.');
+        } else {
+          switchAuthTab('login');
+          setAuthFeedback('login-error-box', 'Password updated! Please sign in.', true);
+        }
+      } catch (err) {
+        setAuthFeedback('reset-error-box', err.message || 'Could not update password.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+
+    window.VOICECARE_SUPABASE?.onPasswordRecovery?.(() => {
+      state.isPasswordRecovery = true;
+      navigate('auth', { pushHistory: false });
+      switchAuthTab('reset');
     });
 
     $('login-form').addEventListener('submit', async (e) => {
@@ -963,17 +1034,17 @@
     applyLanguage();
     wireEvents();
 
-    if (!window.VOICECARE_SUPABASE.isConfigured()) {
+    if (!window.VOICECARE_SUPABASE.isConfigured() && $('firebase-status-note')) {
       $('firebase-status-note').textContent =
         'Sign in to save and sync your doctor consultation summaries across devices.';
     }
 
     // Returning from a Google sign-in redirect (web build): restore the session
     // Supabase already stored, so the patient lands signed in.
-    if (!state.user && window.VOICECARE_SUPABASE.isConfigured()) {
+    if (!state.user && !state.isPasswordRecovery && window.VOICECARE_SUPABASE.isConfigured()) {
       window.VOICECARE_SUPABASE.restoreSession()
         .then((user) => {
-          if (!user) return;
+          if (!user || state.isPasswordRecovery) return;
           state.user = user;
           window.VOICECARE_STORAGE.setUser(user);
           applyLanguage();
@@ -985,7 +1056,9 @@
     // Auto-advance splash smoothly after 1.6s if user hasn't clicked yet
     setTimeout(() => {
       if (state.currentScreen === 'splash') {
-        if (state.user) {
+        if (state.isPasswordRecovery) {
+          navigate('auth', { pushHistory: false });
+        } else if (state.user) {
           navigate('home', { pushHistory: false });
         } else {
           navigate('auth', { pushHistory: false });

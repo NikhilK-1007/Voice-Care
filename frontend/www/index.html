@@ -197,6 +197,51 @@
             </p>
           </section>
         </div>
+
+        <div id="auth-panel-forgot" class="auth-panel hidden" role="tabpanel">
+          <section class="panel auth-card">
+            <div class="auth-card-head">
+              <p class="auth-eyebrow">Password recovery</p>
+              <h2 class="auth-title">Forgot password</h2>
+              <p class="panel-sub">Enter your email address and we will send you a reset link.</p>
+            </div>
+
+            <div id="forgot-error-box" class="auth-feedback hidden" role="alert"></div>
+
+            <form id="forgot-form" class="stack" novalidate>
+              <div class="field">
+                <input id="forgot-email" class="input" type="email" maxlength="120" placeholder="Email address" autocomplete="email" required />
+              </div>
+              <button id="btn-send-reset" class="btn btn-primary" type="submit">Send reset link</button>
+            </form>
+
+            <p class="auth-switch-note">
+              Remembered your password? <button id="link-forgot-to-login" class="auth-link" type="button">Back to Sign in</button>
+            </p>
+          </section>
+        </div>
+
+        <div id="auth-panel-reset" class="auth-panel hidden" role="tabpanel">
+          <section class="panel auth-card">
+            <div class="auth-card-head">
+              <p class="auth-eyebrow">Password recovery</p>
+              <h2 class="auth-title">Set new password</h2>
+              <p class="panel-sub">Enter your new password below (at least 6 characters).</p>
+            </div>
+
+            <div id="reset-error-box" class="auth-feedback hidden" role="alert"></div>
+
+            <form id="reset-form" class="stack" novalidate>
+              <div class="field">
+                <input id="reset-password" class="input" type="password" maxlength="128" placeholder="New password (min 6 characters)" minlength="6" autocomplete="new-password" required />
+              </div>
+              <div class="field">
+                <input id="reset-password-confirm" class="input" type="password" maxlength="128" placeholder="Confirm new password" minlength="6" autocomplete="new-password" required />
+              </div>
+              <button id="btn-update-password" class="btn btn-primary" type="submit">Update password</button>
+            </form>
+          </section>
+        </div>
       </section>
 
       <!-- 3 · HOME -->

@@ -159,10 +159,30 @@ The patient description always contains at least one real health concern, so do 
  * @param {string} patientText
  * @param {string} [extraNotes]
  */
-function buildUserContent(patientText, extraNotes) {
+function buildUserContent(patientText, extraNotes, forceEnglishReminder = false) {
   return `PATIENT DESCRIPTION:\n"""\n${patientText}\n"""\n${
     extraNotes ? `\nADDITIONAL PATIENT CLARIFICATION:\n"""\n${extraNotes}\n"""\n` : ''
+  }\nTranslate and organise the patient description into simple, clear ENGLISH for every field. Never copy native/non-English script or romanised Hindi/Kannada words into the output unless it is a medicine brand name.${
+    forceEnglishReminder
+      ? '\nCRITICAL: Your previous output contained non-English text. Rewrite EVERY field strictly in English.'
+      : ''
   }\nReturn the structured JSON object following the required schema.`;
+}
+
+/** True when any summary field still contains non-Latin Indian/Arabic script. */
+function containsNonLatinScript(summary) {
+  const nonLatin = /[\u0600-\u06FF\u0900-\u0DFF]/;
+  const values = [
+    summary.mainHealthConcern,
+    summary.duration,
+    summary.severity,
+    summary.relevantMedicalHistory,
+    summary.currentMedications,
+    summary.additionalObservations,
+    ...(summary.symptoms || []),
+    ...(summary.questionsToAskDoctor || [])
+  ];
+  return values.some((v) => typeof v === 'string' && nonLatin.test(v));
 }
 
 const MEDICINE_PATTERN =
@@ -230,13 +250,52 @@ function buildDemoFallbackSummary(patientText, language) {
 
   const mainConcern = (symptomLines[0] || normalizeSentence(sentences[0] || patientText)).slice(0, 160);
 
+  const durationRaw = durationMatch ? durationMatch[0].trim() : '';
+  const durationEnglishMap = {
+    'कल से': 'Since yesterday',
+    'परसों से': 'Since day before yesterday',
+    'दिनों से': 'For several days',
+    'हफ्ते से': 'For a week',
+    'ದಿನಗಳಿಂದ': 'For several days',
+    'ವಾರದಿಂದ': 'For a week',
+    'ನಿನ್ನೆಯಿಂದ': 'Since yesterday'
+  };
+  const durationText = durationEnglishMap[durationRaw] || durationRaw || NOT_MENTIONED;
+
+  const severityRaw = severityMatch ? severityMatch[0].trim() : '';
+  const severityEnglishMap = {
+    'तेज': 'Severe',
+    'हल्का': 'Mild',
+    'बहुत ज्यादा': 'Very severe',
+    'ತೀವ್ರ': 'Severe',
+    'ಸ್ವಲ್ಪ': 'Mild',
+    'ತುಂಬಾ': 'Severe'
+  };
+  const severityText = severityEnglishMap[severityRaw] || severityRaw || NOT_MENTIONED;
+
+  const hasNonLatinInput = /[\u0600-\u06FF\u0900-\u0DFF]/.test(patientText);
+
   const rawSummary = {
-    mainHealthConcern: mainConcern,
-    symptoms: symptomLines.length ? symptomLines : [NOT_MENTIONED],
-    duration: durationMatch ? durationMatch[0].trim() : NOT_MENTIONED,
-    severity: severityMatch ? severityMatch[0].trim() : NOT_MENTIONED,
-    relevantMedicalHistory: historySentence ? historySentence.trim() : NOT_MENTIONED,
-    currentMedications: medicationSentence ? medicationSentence.trim() : NOT_MENTIONED,
+    mainHealthConcern: hasNonLatinInput
+      ? 'Patient described health concern in native language (tap Regenerate for AI English translation)'
+      : mainConcern,
+    symptoms: hasNonLatinInput
+      ? ['Described in native language — tap Regenerate when AI is online for English summary']
+      : symptomLines.length
+        ? symptomLines
+        : [NOT_MENTIONED],
+    duration: durationText,
+    severity: severityText,
+    relevantMedicalHistory: historySentence
+      ? hasNonLatinInput
+        ? 'Mentioned in native description'
+        : historySentence.trim()
+      : NOT_MENTIONED,
+    currentMedications: medicationSentence
+      ? hasNonLatinInput
+        ? 'Mentioned in native description'
+        : medicationSentence.trim()
+      : NOT_MENTIONED,
     additionalObservations: NOT_MENTIONED,
     questionsToAskDoctor: [
       'What could be causing these symptoms?',
@@ -260,7 +319,7 @@ function sleep(ms) {
  * Low thinking keeps Gemini 3 flash fast (~3-6s instead of 20-35s) and avoids
  * the long silent reasoning step that made the mobile processing screen hang.
  */
-function buildPayload(patientText, language, extraNotes, withThinking) {
+function buildPayload(patientText, language, extraNotes, withThinking, forceEnglishReminder = false) {
   const generationConfig = {
     temperature: 0.1,
     topP: 0.8,
@@ -278,7 +337,7 @@ function buildPayload(patientText, language, extraNotes, withThinking) {
     contents: [
       {
         role: 'user',
-        parts: [{ text: buildUserContent(patientText, extraNotes) }]
+        parts: [{ text: buildUserContent(patientText, extraNotes, forceEnglishReminder) }]
       }
     ],
     generationConfig
@@ -376,12 +435,13 @@ async function generateHealthSummary({ patientText, language = 'en', extraNotes 
     if (Date.now() - startedAt > TOTAL_BUDGET_MS) break;
 
     let withThinking = true;
+    let forceEnglishReminder = false;
 
     for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt += 1) {
       const result = await callModel({
         model,
         apiKey,
-        payload: buildPayload(patientText, language, extraNotes, withThinking)
+        payload: buildPayload(patientText, language, extraNotes, withThinking, forceEnglishReminder)
       });
 
       if (result.ok) {
@@ -398,6 +458,10 @@ async function generateHealthSummary({ patientText, language = 'en', extraNotes 
           });
 
           if (!isSummaryEmpty(summary.summary)) {
+            if (containsNonLatinScript(summary.summary) && !forceEnglishReminder) {
+              forceEnglishReminder = true;
+              continue;
+            }
             rememberWorkingModel(result.model);
             return summary;
           }

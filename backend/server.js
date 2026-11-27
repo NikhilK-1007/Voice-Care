@@ -142,6 +142,9 @@ app.use((err, _req, res, _next) => {
   if (err && err.message === 'Origin not allowed by CORS') {
     return res.status(403).json({ success: false, error: 'Origin not allowed.' });
   }
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, error: 'Invalid JSON request body.' });
+  }
   console.error('[VoiceCare Server Error]:', err?.message || 'Unknown error');
   return res.status(500).json({ success: false, error: 'Internal server error.' });
 });

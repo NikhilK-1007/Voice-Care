@@ -230,7 +230,7 @@
       entry.metadata?.disclaimer ||
       'For doctor communication only — not a medical diagnosis or prescription.';
 
-    $('summary-lang-badge').textContent = entry.languageLabel || 'English';
+    $('summary-lang-badge').textContent = 'English';
     const meta = entry.metadata || {};
     $('summary-source-badge').textContent =
       meta.source === 'gemini'

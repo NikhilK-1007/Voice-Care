@@ -36,15 +36,15 @@ flowchart LR
 
 | Category | What VoiceCare Delivers |
 | --- | --- |
-| 🎙️ **In-App Voice Input** | Built-in `MediaRecorder` (`32 kbps` mono Opus, up to 60s) posts to `/api/transcribe`—no external keyboard install required. |
-| 🌐 **Multilingual Support** | UI in **English, हिन्दी (Hindi), ಕನ್ನಡ (Kannada)** + automatic AI detection of any Indian spoken language or transliteration (Hinglish, Kanglish, Tamil, Telugu, Bengali, Marathi, etc.). |
+| 🎙️ **In-App Voice Input** | Built-in `MediaRecorder` (`32 kbps` mono Opus, up to 60s) posts to `/api/transcribe` over HTTPS; raw audio buffers are cleared immediately after transcription and never saved to disk. |
+| 🌐 **Multilingual Input → English Summary** | UI in **English, हिन्दी (Hindi), ಕನ್ನಡ (Kannada)** + automatic AI detection of any Indian spoken language or transliteration, always outputting a clean **English** summary for doctors. |
 | 📋 **8-Section Doctor Summary** | Organises text into: *Main Concern, Symptoms, Duration, Severity, Medical History, Current Medications, Observations, Questions to Ask the Doctor*. |
-| 🛡️ **Strict Healthcare Safety** | Never diagnoses or prescribes. Unmentioned fields stay `"Not mentioned by patient"`. Red-flag symptoms surface **108 / 112** emergency guidance. |
+| 🛡️ **Strict Healthcare Safety** | Never diagnoses or prescribes. Unmentioned fields stay `"Not mentioned by patient"`. Red-flag symptoms surface clickable **108 / 112** emergency helplines. |
 | ✏️ **Edit & Confirm Gate** | Patients review and edit every section individually and confirm accuracy before sharing. |
-| 📄 **Offline PDF & Sharing** | Client-side `jsPDF` report generation, Android native Share sheet (`@capacitor/share`), and one-tap clipboard copy. |
-| 💊 **Medicine Reminders** | Prescription-based local reminder scheduling via `@capacitor/local-notifications`. |
-| 🔐 **Guest Mode + Supabase** | Instant zero-setup Guest Mode (on-device `localStorage`) or optional Email / Google Sign-In with PostgreSQL Row-Level Security. |
-| ♿ **Elderly Accessibility** | Large & Extra-Large text scaling, High Contrast mode, Calm Display (reduced motion), and clear step-by-step navigation across 12 screens. |
+| 📄 **Offline PDF & Sharing** | Client-side `jsPDF` (`v4.2+`) report generation, Android native Share sheet (`@capacitor/share`), and one-tap clipboard copy. |
+| 💊 **Smart Medicine Tracker** | Prescription-based reminders via `@capacitor/local-notifications`, featuring a *Next reminder* banner and daily *Mark as taken* tracking. |
+| 🔐 **Guest Mode + Full Auth** | Zero-setup Guest Mode (on-device `localStorage`) or Supabase Email/Password + Google OAuth with *Sign up*, *Forgot password* recovery, *Remember for 30 days*, and PostgreSQL Row-Level Security. |
+| ♿ **Elderly Accessibility & UX** | Warm cream & forest-teal editorial design, 3-way *Text Size* (`Standard / Large / Extra Large`), *High Contrast*, *Calm Display*, and native Android back-button exit from Home. |
 
 ---
 
@@ -82,9 +82,9 @@ Voice-Care/
 │   │   └── copy-vendor.js        # Copies jsPDF to www/vendor/ for offline PDFs
 │   ├── android/                  # Native Capacitor Android project
 │   └── www/
-│       ├── index.html            # 12 mobile screens
-│       ├── assets/               # VoiceCare app logo (logo.svg, logo.png)
-│       ├── css/styles.css        # Teal & mint elderly-friendly design system
+│       ├── index.html            # 12 mobile screens (UX Pilot editorial redesign)
+│       ├── assets/               # App launcher logo (logo.svg, logo.png) & splash-mark.svg
+│       ├── css/styles.css        # Warm cream, forest-teal & saffron accessible UI system
 │       └── js/
 │           ├── config.js         # Backend API_BASE_URL & Supabase client config
 │           ├── i18n.js           # English, Hindi & Kannada UI translations
@@ -163,10 +163,11 @@ adb install -r path/to/app-debug.apk
 
 ---
 
-## ☁️ Backend Deployment (Render) & Cloud Auth (Supabase)
+## ☁️ Backend Deployment (Render), Security & Cloud Auth (Supabase)
 
-- **Backend Hosting:** Configured for **Render** (`Root Directory: backend`, Build: `npm install`, Start: `npm start`, Env Var: `GEMINI_API_KEY`). Set `API_BASE_URL` in `frontend/www/js/config.js` to your HTTPS Render URL before building a production/shipped APK.
-- **Database & Auth:** Uses **Supabase** (`public.summaries` table with Row-Level Security `auth.uid() = user_id`), supporting Email/Password login and Google OAuth via the Android deep link `in.voicecare.app://auth-callback`.
+- **Backend Hosting:** Deployed on **Render** (`Root Directory: backend`, Region: `Singapore`, Build: `npm install`, Start: `npm start`, Env Var: `GEMINI_API_KEY`). `API_BASE_URL` in `frontend/www/js/config.js` points to the live HTTPS backend.
+- **Database & Auth:** Uses **Supabase** (`public.summaries` table with Row-Level Security `auth.uid() = user_id`), supporting Email/Password sign-in & sign-up, password reset recovery, and Google OAuth via the Android deep link `in.voicecare.app://auth-callback`.
+- **Security Hardening:** Server-side `GEMINI_API_KEY`, Helmet CSP & security headers, strict CORS allow-list, per-IP rate limiting (`30 req/min` API, `15 req/min` `/api/transcribe`), `Cache-Control: no-store` on patient audio/summary responses, input sanitization, and `0` production npm vulnerabilities.
 
 ---
 

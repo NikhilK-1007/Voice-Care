@@ -165,7 +165,7 @@ adb install -r path/to/app-debug.apk
 ## ☁️ Backend Deployment (Render), Security & Cloud Auth (Supabase)
 
 - **Backend Hosting:** Deployed on **Render** (`Root Directory: backend`, Region: `Singapore`, Build: `npm install`, Start: `npm start`, Env Var: `GEMINI_API_KEY`). `API_BASE_URL` in `frontend/www/js/config.js` points to the live HTTPS backend.
-- **Database & Auth:** Uses **Supabase** (`public.summaries` table with Row-Level Security `auth.uid() = user_id`), supporting Email/Password sign-in & sign-up, password reset recovery, and Google OAuth via the Android deep link `in.voicecare.app://auth-callback`.
+- **Database & Auth:** Uses **Supabase** (`public.summaries` table with `text` primary key and Row-Level Security `select`/`insert`/`update`/`delete` policies for `authenticated` users matching `auth.uid() = user_id`), supporting Email/Password sign-in & sign-up, password reset recovery, Google OAuth via `in.voicecare.app://auth-callback`, cross-device medicine reminder sync, and live status/manual sync under **Settings → Cloud backup & sync**.
 - **Security & Reliability Hardening:** Server-side `GEMINI_API_KEY`, Helmet CSP & security headers, strict CORS allow-list, per-IP rate limiting (`30 req/min` API, `15 req/min` `/api/transcribe`), `Cache-Control: no-store` on patient audio/summary responses, abortable client fetch timeouts with concurrent-request cancellation, non-blocking offline-first startup, Android 13+ `POST_NOTIFICATIONS` permission & notification icon, and `0` production npm vulnerabilities.
 
 ---

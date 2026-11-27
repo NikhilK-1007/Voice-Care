@@ -29,10 +29,10 @@ In busy Indian clinics, patients—especially elderly individuals and those unco
 
 ```mermaid
 flowchart LR
-    A["📱 Android App (Capacitor)\nHTML · CSS · JS · MediaRecorder"] -->|HTTPS Audio / Text| B["⚙️ Express Backend (Render)\nSafety Validator · Model Chain"]
-    B -->|REST API (Key on Server)| C["🧠 Google Gemini AI\nTranscribe + 8-Section JSON"]
-    A -->|Email / Google OAuth + RLS| D["🗄️ Supabase\nAuth & PostgreSQL Sync"]
-    A -->|Offline| E["📄 jsPDF + Native Share\nDoctor-Ready PDF"]
+    A["📱 Android App - Capacitor<br/>HTML · CSS · JS · MediaRecorder"] -->|"HTTPS Audio / Text"| B["⚙️ Express Backend - Render<br/>Safety Validator · Model Chain"]
+    B -->|"REST API - Key on Server"| C["🧠 Google Gemini AI<br/>Transcribe + 8-Section JSON"]
+    A -->|"Email / Google OAuth + RLS"| D["🗄️ Supabase<br/>Auth & PostgreSQL Sync"]
+    A -->|"Offline"| E["📄 jsPDF + Native Share<br/>Doctor-Ready PDF"]
 ```
 
 ---

@@ -187,6 +187,8 @@ svg.icon-sm { width: 15px; height: 15px; stroke-width: 1.8; }
 .icon-button:hover { background: var(--surface-sunk); border-color: var(--line-strong); }
 
 .appbar-action {
+  width: auto;
+  justify-self: end;
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 999px;

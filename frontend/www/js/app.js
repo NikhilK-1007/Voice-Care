@@ -8,17 +8,17 @@
 (() => {
   const SCREENS = {
     splash: { title: 'VoiceCare', topbar: false, bottomNav: false },
-    auth: { title: 'Sign In / Guest Demo', topbar: true, bottomNav: false },
-    home: { title: 'VoiceCare Home', topbar: true, bottomNav: true, back: false },
-    language: { title: 'Select Language', topbar: true, bottomNav: false },
-    input: { title: 'Describe Health Concern', topbar: true, bottomNav: true },
-    processing: { title: 'Preparing Summary', topbar: true, bottomNav: false },
-    summary: { title: 'Health Summary', topbar: true, bottomNav: false },
-    edit: { title: 'Edit Summary', topbar: true, bottomNav: false },
-    pdf: { title: 'PDF Preview & Share', topbar: true, bottomNav: false },
-    reminders: { title: 'Medicine Reminders', topbar: true, bottomNav: true },
-    history: { title: 'Patient History', topbar: true, bottomNav: true },
-    about: { title: 'About, Privacy & Access', topbar: true, bottomNav: true }
+    auth: { title: 'Sign in', topbar: false, bottomNav: false },
+    home: { title: 'VoiceCare Home', topbar: false, bottomNav: true, back: false },
+    language: { title: 'Select Language', topbar: false, bottomNav: false },
+    input: { title: 'Describe Health Concern', topbar: false, bottomNav: true },
+    processing: { title: 'Preparing Summary', topbar: false, bottomNav: false },
+    summary: { title: 'Health Summary', topbar: false, bottomNav: false },
+    edit: { title: 'Edit Summary', topbar: false, bottomNav: false },
+    pdf: { title: 'PDF Preview & Share', topbar: false, bottomNav: false },
+    reminders: { title: 'Medicine Reminders', topbar: false, bottomNav: true },
+    history: { title: 'Patient History', topbar: false, bottomNav: true },
+    about: { title: 'Safety & Accessibility', topbar: false, bottomNav: true }
   };
 
   const state = {

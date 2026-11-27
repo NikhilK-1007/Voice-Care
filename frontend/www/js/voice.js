@@ -80,7 +80,9 @@ window.VOICECARE_VOICE = (() => {
     const timer = $('voice-timer');
     if (!timer) return;
     const totalSeconds = Math.floor((Date.now() - startedAt) / 1000);
-    timer.textContent = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+    const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+    const secs = String(totalSeconds % 60).padStart(2, '0');
+    timer.textContent = `${mins}:${secs}`;
   }
 
   function releaseStream() {

@@ -61,14 +61,33 @@
 
   function applyAccessibility() {
     const acc = state.accessibility;
+    const size = acc.textSize || 'large';
     document.body.classList.remove('text-standard', 'text-large', 'text-xl');
-    document.body.classList.add(`text-${acc.textSize || 'large'}`);
+    document.body.classList.add(`text-${size}`);
     document.body.classList.toggle('high-contrast', Boolean(acc.highContrast));
     document.body.classList.toggle('reduced-motion', Boolean(acc.reducedMotion));
 
-    $('acc-text-size').value = acc.textSize || 'large';
+    $('acc-text-size').value = size;
     $('acc-high-contrast').checked = Boolean(acc.highContrast);
     $('acc-reduced-motion').checked = Boolean(acc.reducedMotion);
+
+    document.querySelectorAll('[data-text-size]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.getAttribute('data-text-size') === size);
+    });
+  }
+
+  function getTimeGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  function getInitials(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 'VC';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   function applyLanguage() {
@@ -81,16 +100,23 @@
     // Splash & Home texts
     $('splash-tagline').textContent = t.tagline;
     const namePart = state.user?.name ? `, ${state.user.name}` : '';
+    const timeLabel = $('home-time-label');
+    if (timeLabel) timeLabel.textContent = getTimeGreeting();
     $('home-greeting').textContent = `${t.greeting}${namePart}`;
+    const avatarBtn = $('home-avatar-btn');
+    if (avatarBtn) avatarBtn.textContent = getInitials(state.user?.name);
     $('home-subtitle').textContent = t.homeSubtitle;
-    $('btn-home-describe').textContent = t.startDescribeTitle;
     $('home-active-lang-label').textContent = t.nativeName;
+    const settingsLangVal = $('settings-lang-value');
+    if (settingsLangVal) settingsLangVal.textContent = t.nativeName;
 
     // Voice input copy (the recorder reads the same keys)
     const voiceTitle = $('voice-title');
     if (voiceTitle) voiceTitle.textContent = t.voiceTitle || t.voiceStart || 'Tap to speak';
     const voiceSub = $('voice-sub');
-    if (voiceSub && t.voiceSub) voiceSub.textContent = t.voiceSub;
+    if (voiceSub && t.voiceSub) {
+      voiceSub.innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg> ${escapeHtml(t.voiceSub)}`;
+    }
     const inputPageSub = $('input-page-sub');
     if (inputPageSub && t.inputPageSub) inputPageSub.textContent = t.inputPageSub;
     window.VOICECARE_VOICE?.refreshLabels?.();
@@ -98,7 +124,7 @@
     // "auto" means the patient may use any language; keep an English UI hint.
     inputBox.setAttribute('lang', lang === 'auto' ? 'en' : lang);
     inputBox.placeholder = t.inputPlaceholder;
-    $('btn-generate-summary').textContent = t.generateBtn;
+    $('btn-generate-summary').innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-sparkles"></use></svg> ${escapeHtml(t.generateBtn)}`;
     $('btn-clear-input').textContent = t.clearBtn;
     $('input-lang-indicator').textContent = t.nativeName;
     $('input-disclaimer').textContent = t.disclaimerShort;
@@ -144,6 +170,7 @@
     $('topbar-title').textContent = meta.title;
     $('bottom-nav').classList.toggle('hidden', !meta.bottomNav);
     $('main-content').classList.toggle('no-bottom-nav', !meta.bottomNav);
+    $('main-content').classList.toggle('is-splash', screenName === 'splash');
 
     document.querySelectorAll('#bottom-nav .tab').forEach((btn) => {
       btn.classList.toggle('active', btn.getAttribute('data-screen') === screenName);
@@ -175,35 +202,31 @@
 
   function buildSummarySectionHtml(s) {
     const rows = [
-      { title: 'Main health concern', type: 'text', value: s.mainHealthConcern },
-      { title: 'Symptoms', type: 'list', value: s.symptoms },
-      { title: 'Duration', type: 'text', value: s.duration },
-      { title: 'Severity', type: 'text', value: s.severity },
-      { title: 'Relevant medical history', type: 'text', value: s.relevantMedicalHistory },
-      { title: 'Current medications', type: 'text', value: s.currentMedications },
-      { title: 'Additional observations', type: 'text', value: s.additionalObservations },
-      { title: 'Questions to ask the doctor', type: 'ordered', value: s.questionsToAskDoctor }
+      { title: 'Main health concern', icon: 'i-target', type: 'text', value: s.mainHealthConcern },
+      { title: 'Symptoms', icon: 'i-file', type: 'list', value: s.symptoms },
+      { title: 'Duration', icon: 'i-calendar', type: 'text', value: s.duration },
+      { title: 'Severity', icon: 'i-alert', type: 'text', value: s.severity },
+      { title: 'Relevant medical history', icon: 'i-history', type: 'text', value: s.relevantMedicalHistory },
+      { title: 'Current medications', icon: 'i-pill', type: 'text', value: s.currentMedications },
+      { title: 'Additional observations', icon: 'i-eye', type: 'text', value: s.additionalObservations },
+      { title: 'Questions to ask the doctor', icon: 'i-help', type: 'list', value: s.questionsToAskDoctor, isQuestions: true }
     ];
 
     return rows
-      .map((row, index) => {
+      .map((row) => {
         let bodyHtml = '';
         if (row.type === 'list') {
           bodyHtml = `<ul class="record-list">${(row.value || [])
             .map((item) => `<li>${escapeHtml(item)}</li>`)
             .join('')}</ul>`;
-        } else if (row.type === 'ordered') {
-          bodyHtml = `<ol class="record-list">${(row.value || [])
-            .map((item) => `<li>${escapeHtml(item)}</li>`)
-            .join('')}</ol>`;
         } else {
           bodyHtml = `<p class="record-text">${escapeHtml(row.value || 'Not mentioned by patient')}</p>`;
         }
 
         return `
-          <div class="record">
+          <div class="record-card${row.isQuestions ? ' is-questions' : ''}">
             <div class="record-head">
-              <span class="record-index">${String(index + 1).padStart(2, '0')}</span>
+              <span class="record-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#${row.icon}"></use></svg></span>
               <span class="record-title">${escapeHtml(row.title)}</span>
             </div>
             ${bodyHtml}
@@ -330,27 +353,85 @@
     }
   }
 
+  function formatTime12h(time24) {
+    const [hStr, mStr] = String(time24 || '08:00').split(':');
+    let h = Number(hStr) || 0;
+    const m = String(Number(mStr) || 0).padStart(2, '0');
+    const period = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${period}`;
+  }
+
   function renderReminders() {
     const list = window.VOICECARE_STORAGE.getReminders();
+    const todayKey = new Date().toDateString();
     const container = $('reminders-list');
+    const remForm = $('reminder-form');
+    const nextBanner = $('next-reminder-banner');
+    const nextText = $('next-reminder-text');
+    const subEl = $('reminders-subtitle');
 
-    if (!list.length) {
-      container.innerHTML = `<div class="empty-state">No medicine reminders yet.</div>`;
+    const sorted = [...list].sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+    const remaining = sorted.filter((r) => r.takenDate !== todayKey);
+
+    if (subEl) {
+      subEl.textContent = sorted.length
+        ? `Today · ${remaining.length} of ${sorted.length} remaining`
+        : 'Today · No reminders scheduled';
+    }
+
+    if (remaining.length > 0 && nextBanner && nextText) {
+      const next = remaining[0];
+      nextBanner.classList.remove('hidden');
+      nextText.textContent = `${formatTime12h(next.time)} · ${next.name}`;
+    } else if (nextBanner) {
+      nextBanner.classList.add('hidden');
+    }
+
+    if (!sorted.length) {
+      if (remForm) remForm.classList.remove('hidden');
+      container.innerHTML = `<div class="empty-state">No medicine reminders yet. Use the form above to add one.</div>`;
       return;
     }
 
-    container.innerHTML = list
-      .map(
-        (rem) => `
-      <div class="item">
-        <div class="item-head">
-          <span class="item-title">${escapeHtml(rem.name)}</span>
-          <span class="badge">${escapeHtml(rem.time)}</span>
+    const nextDueId = remaining[0]?.id;
+
+    container.innerHTML = sorted
+      .map((rem) => {
+        const isTaken = rem.takenDate === todayKey;
+        const isDue = !isTaken && rem.id === nextDueId;
+        return `
+      <div class="med-card${isDue ? ' is-due' : ''}">
+        <div class="med-card-top">
+          <div class="med-card-left">
+            <span class="med-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-pill"></use></svg></span>
+            <div>
+              <p class="med-name">${escapeHtml(rem.name)}</p>
+              ${rem.dosageNote ? `<p class="med-note">${escapeHtml(rem.dosageNote)}</p>` : ''}
+            </div>
+          </div>
+          ${
+            isTaken
+              ? `<button class="taken-check" data-rem-take="${escapeHtml(rem.id)}" type="button" aria-label="Marked as taken"><svg class="icon icon-sm"><use href="#i-check"></use></svg></button>`
+              : ''
+          }
         </div>
-        <p class="item-meta">
-          ${escapeHtml(rem.timingTag)}${rem.dosageNote ? ` · ${escapeHtml(rem.dosageNote)}` : ''}
-        </p>
+        <div class="med-tags">
+          <span class="tag-pill"><svg class="icon icon-sm" style="width:13px;height:13px;"><use href="#i-clock"></use></svg> ${escapeHtml(formatTime12h(rem.time))}</span>
+          <span class="tag-pill is-meal">${escapeHtml(rem.timingTag)}</span>
+          ${isTaken ? '<span class="tag-pill is-taken">Taken</span>' : ''}
+        </div>
+        ${
+          isDue
+            ? `<button class="btn btn-primary" data-rem-take="${escapeHtml(rem.id)}" type="button" style="margin-top: 12px; min-height: 44px;">Mark as taken</button>`
+            : ''
+        }
         <div class="item-actions">
+          ${
+            !isDue && !isTaken
+              ? `<button class="btn btn-secondary btn-sm" data-rem-take="${escapeHtml(rem.id)}" type="button">Mark taken</button>`
+              : ''
+          }
           <button class="btn btn-quiet btn-sm" data-rem-test="${escapeHtml(rem.id)}" type="button">
             Test alert
           </button>
@@ -359,9 +440,22 @@
           </button>
         </div>
       </div>
-    `
-      )
+    `;
+      })
       .join('');
+
+    container.querySelectorAll('[data-rem-take]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-rem-take');
+        const all = window.VOICECARE_STORAGE.getReminders().map((r) =>
+          r.id === id
+            ? { ...r, takenDate: r.takenDate === todayKey ? '' : todayKey }
+            : r
+        );
+        window.VOICECARE_STORAGE.saveReminders(all);
+        renderReminders();
+      });
+    });
 
     container.querySelectorAll('[data-rem-del]').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -973,12 +1067,19 @@
     });
 
     // 10. Medicine Reminders
+    $('btn-toggle-rem-form')?.addEventListener('click', () => {
+      $('reminder-form')?.classList.toggle('hidden');
+      if (!$('reminder-form')?.classList.contains('hidden')) {
+        $('rem-name')?.focus();
+      }
+    });
+
     $('reminder-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = $('rem-name').value.trim();
+      const name = sanitizeInput($('rem-name').value, 100);
       const time = $('rem-time').value;
       const timingTag = $('rem-timing-tag').value;
-      const dosageNote = $('rem-note').value.trim();
+      const dosageNote = sanitizeInput($('rem-note').value, 120);
 
       if (!name || !time) return;
 
@@ -998,6 +1099,7 @@
 
       $('reminder-form').reset();
       $('rem-time').value = '08:00';
+      $('reminder-form').classList.add('hidden');
       renderReminders();
       showToast(`Medicine reminder added for ${name}`);
     });
@@ -1019,6 +1121,29 @@
     $('acc-text-size').addEventListener('change', saveAcc);
     $('acc-high-contrast').addEventListener('change', saveAcc);
     $('acc-reduced-motion').addEventListener('change', saveAcc);
+
+    document.querySelectorAll('[data-text-size]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $('acc-text-size').value = btn.getAttribute('data-text-size');
+        saveAcc();
+      });
+    });
+
+    $('settings-lang-row')?.addEventListener('click', () => navigate('language'));
+    $('settings-privacy-row')?.addEventListener('click', () => {
+      $('privacy-details-card')?.classList.toggle('hidden');
+    });
+    $('home-avatar-btn')?.addEventListener('click', () => navigate('about'));
+
+    document.querySelectorAll('[data-toggle-pw]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = $(btn.getAttribute('data-toggle-pw'));
+        if (!input) return;
+        const isPw = input.type === 'password';
+        input.type = isPw ? 'text' : 'password';
+        btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
+      });
+    });
 
     $('btn-logout').addEventListener('click', () => {
       window.VOICECARE_STORAGE.clearUser();

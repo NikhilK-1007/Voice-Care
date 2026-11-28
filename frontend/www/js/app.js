@@ -282,9 +282,18 @@
    * patient spoke. Returns null when the AI could not translate this visit.
    */
   function englishSummarySections(entry) {
-    if (!entry?.englishSummary) return null;
-    if (entry.metadata?.englishIsGenerated === false) return null;
-    return entry.englishSummary;
+    if (entry?.englishSummary) {
+      if (entry.metadata?.englishIsGenerated === false) return null;
+      return entry.englishSummary;
+    }
+    // Visits saved before the English-only build only carry the original
+    // summary. Show it when it is already Latin-script English instead of
+    // claiming the English version is missing.
+    const legacy = entry?.summary;
+    if (legacy && !/[\u0600-\u06FF\u0900-\u0DFF]/.test(JSON.stringify(legacy))) {
+      return legacy;
+    }
+    return null;
   }
 
   /** One-line patient identity used on the home tile, summary and PDF. */
@@ -662,7 +671,10 @@
     const entry = state.currentEntry;
     if (!entry) return;
 
-    $('pdf-unconfirmed-banner').style.display = entry.confirmed ? 'none' : 'block';
+    // Confirm is only offered when there is something to confirm.
+    const english = englishSummarySections(entry);
+    $('pdf-unconfirmed-banner').style.display = !entry.confirmed && english ? 'block' : 'none';
+    $('btn-quick-confirm')?.classList.toggle('hidden', !english);
 
     const dateStr = new Date(entry.updatedAt || entry.createdAt).toLocaleString('en-IN', {
       dateStyle: 'medium',
@@ -679,8 +691,6 @@
            <p class="urgent-call-line">If this is an emergency, call 108.</p>
          </section>`
       : '';
-
-    const english = englishSummarySections(entry);
 
     const possible = (Array.isArray(entry.possibleSymptoms) ? entry.possibleSymptoms : [])
       .map((item) => String(item || '').trim())
@@ -701,10 +711,24 @@
         ? buildSummarySectionHtml(english)
         : `<div class="alert alert-warning" style="display: block;">
              <p class="alert-title">English summary not ready</p>
-             <p>Tap Regenerate to try the translation again.</p>
+             <p>The AI could not translate this visit yet. Generate it again from the recorded complaint.</p>
+             <button id="btn-pdf-regenerate" class="btn btn-secondary btn-sm" type="button" style="margin-top: 10px;">
+               Regenerate English summary
+             </button>
            </div>`}
       ${possibleHtml}
     `;
+
+    $('btn-pdf-regenerate')?.addEventListener('click', () => {
+      if (!state.currentEntry?.patientText) {
+        showToast('Original description is unavailable for regeneration.');
+        return;
+      }
+      runAiSummarization({
+        patientText: state.currentEntry.patientText,
+        endpoint: 'regenerate'
+      });
+    });
   }
 
   function abortActiveSummaryRequest() {

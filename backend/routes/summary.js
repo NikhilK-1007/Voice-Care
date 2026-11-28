@@ -14,7 +14,10 @@ function sanitizeLanguage(raw) {
   if (typeof raw !== 'string') return 'en';
   const trimmed = raw.trim();
   if (!trimmed) return 'en';
-  if (trimmed.toLowerCase() === 'auto') return 'auto';
+  // "auto" used to be passed straight through and made the model ramble for a
+  // minute before timing out. Detection happens on the text anyway, so auto is
+  // treated as English for the instruction only.
+  if (trimmed.toLowerCase() === 'auto') return 'en';
   if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(trimmed)) return 'en';
   return trimmed.toLowerCase();
 }

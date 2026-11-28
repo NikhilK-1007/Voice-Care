@@ -31,6 +31,45 @@ const EMERGENCY_PATTERNS = [
   /\b(ede novu|usiradalu kashta|prajne tappi)\b/i
 ];
 
+/** Native-language names, used for the badge the doctor reads. */
+const SCRIPT_LABELS = {
+  hi: 'हिन्दी',
+  kn: 'ಕನ್ನಡ',
+  ta: 'தமிழ்',
+  te: 'తెలుగు',
+  bn: 'বাংলা',
+  gu: 'ગુજરાતી',
+  pa: 'ਪੰਜਾਬੀ',
+  ml: 'മലയാളം',
+  or: 'ଓଡ଼ିଆ',
+  ur: 'اردو',
+  en: 'English'
+};
+
+/**
+ * Detects the language of the patient's words from the script they typed or
+ * dictated. The app's menu language is only a preference: a patient can type
+ * Hindi while the app is in English, and labelling that summary "English" made
+ * the screen look broken.
+ *
+ * @param {unknown} text
+ * @returns {'hi'|'kn'|'ta'|'te'|'bn'|'gu'|'pa'|'ml'|'or'|'ur'|'en'}
+ */
+function detectScriptLanguage(text) {
+  const value = String(text ?? '');
+  if (/[\u0900-\u097F]/.test(value)) return 'hi';
+  if (/[\u0C80-\u0CFF]/.test(value)) return 'kn';
+  if (/[\u0C00-\u0C7F]/.test(value)) return 'te';
+  if (/[\u0B80-\u0BFF]/.test(value)) return 'ta';
+  if (/[\u0980-\u09FF]/.test(value)) return 'bn';
+  if (/[\u0A80-\u0AFF]/.test(value)) return 'gu';
+  if (/[\u0A00-\u0A7F]/.test(value)) return 'pa';
+  if (/[\u0D00-\u0D7F]/.test(value)) return 'ml';
+  if (/[\u0B00-\u0B7F]/.test(value)) return 'or';
+  if (/[\u0600-\u06FF]/.test(value)) return 'ur';
+  return 'en';
+}
+
 /** The 8 summary sections, in order. */
 const SUMMARY_KEYS = [
   'mainHealthConcern',
@@ -235,6 +274,29 @@ function normalizeSections(raw) {
 }
 
 /**
+ * Cleans the AI's "possible symptoms" suggestions: short English phrases the
+ * patient may also want to mention. They are never presented as the patient's
+ * own words, so they are kept apart from the eight summary sections.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+function normalizePossibleSymptoms(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const cleaned = [];
+  const nonLatin = /[\u0600-\u06FF\u0900-\u0DFF]/;
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    const text = item.replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (text.length < 3) continue;
+    if (nonLatin.test(text)) continue; // the doctor-facing list must be English
+    if (text.toLowerCase() === NOT_MENTIONED.toLowerCase()) continue;
+    if (!cleaned.some((s) => s.toLowerCase() === text.toLowerCase())) cleaned.push(text);
+    if (cleaned.length >= 6) break;
+  }
+  return cleaned;
+}
+
+/**
  * Cleans the "what is still missing" list. It may only describe gaps, never
  * suggest a diagnosis or a treatment.
  * @param {unknown} raw
@@ -312,6 +374,7 @@ function enforceSummarySchema(rawSummary, originalText, language, source, extra 
     urgentFlags = detectRedFlagPhrases(originalText);
   }
 
+  const detectedLanguage = detectScriptLanguage(originalText);
   const missingInfo = normalizeMissingInfo(rawSummary?.missingInfo ?? rawSummary?.missing_info);
   const followUpQuestions = normalizeFollowUpQuestions(
     rawSummary?.followUpQuestions ?? rawSummary?.follow_up_questions
@@ -323,11 +386,16 @@ function enforceSummarySchema(rawSummary, originalText, language, source, extra 
     urgentFlags,
     missingInfo,
     followUpQuestions,
+    possibleSymptoms: normalizePossibleSymptoms(
+      rawSummary?.possibleSymptoms ?? rawSummary?.possible_symptoms
+    ),
     metadata: {
       source,
       model: extra.model || null,
       demoReason: source === 'demo-fallback' ? extra.demoReason || null : null,
       language,
+      detectedLanguage,
+      detectedLanguageLabel: SCRIPT_LABELS[detectedLanguage] || 'English',
       englishIsGenerated: englishIsUsable,
       generatedAt: new Date().toISOString(),
       disclaimer: MANDATORY_DISCLAIMER,
@@ -376,12 +444,15 @@ module.exports = {
   MANDATORY_DISCLAIMER,
   EMERGENCY_GUIDANCE,
   SUMMARY_KEYS,
+  SCRIPT_LABELS,
+  detectScriptLanguage,
   validatePatientInput,
   detectEmergencyWarning,
   detectRedFlagPhrases,
   filterUrgentFlags,
   normalizeMissingInfo,
   normalizeFollowUpQuestions,
+  normalizePossibleSymptoms,
   normalizeSections,
   containsNonLatinScript,
   enforceSummarySchema,

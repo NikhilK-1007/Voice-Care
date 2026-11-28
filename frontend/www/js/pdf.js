@@ -86,7 +86,6 @@ window.VOICECARE_PDF = (() => {
       info.bloodGroup ? `Blood group: ${info.bloodGroup}` : null,
       info.allergies ? `Allergies: ${info.allergies}` : null,
       info.emergencyContact ? `Emergency contact: ${info.emergencyContact}` : null,
-      `Patient language: ${entry.languageLabel || 'English'}`,
       '----------------------------------------'
     ].filter(Boolean);
 
@@ -97,19 +96,15 @@ window.VOICECARE_PDF = (() => {
       lines.push('----------------------------------------');
     }
 
-    lines.push(`SUMMARY (${entry.languageLabel || 'English'})`);
+    // English only: the app never prints a second-language summary.
+    lines.push('SUMMARY (ENGLISH)');
     SECTIONS.forEach(([key, title], index) => {
-      lines.push('', `${index + 1}. ${title}:`, sectionValueText(entry.summary?.[key]));
+      lines.push(
+        '',
+        `${index + 1}. ${title}:`,
+        sectionValueText(entry.englishSummary?.[key] ?? entry.summary?.[key])
+      );
     });
-
-    lines.push('', '----------------------------------------', 'ENGLISH VERSION');
-    SECTIONS.forEach(([key, title], index) => {
-      lines.push('', `${index + 1}. ${title}:`, sectionValueText(entry.englishSummary?.[key]));
-    });
-
-    if (entry.patientText) {
-      lines.push('', '----------------------------------------', "PATIENT'S OWN WORDS (UNEDITED):", entry.patientText);
-    }
 
     const answers = (entry.followUpAnswers || []).filter((a) => a && a.answer);
     if (answers.length) {
@@ -117,7 +112,14 @@ window.VOICECARE_PDF = (() => {
       answers.forEach((a) => lines.push(`Q: ${a.question}`, `A: ${a.answer}`));
     }
 
-    if (entry.shareUrl) lines.push('', `Read-only doctor link (24 hours): ${entry.shareUrl}`);
+    const possible = (Array.isArray(entry.possibleSymptoms) ? entry.possibleSymptoms : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (possible.length) {
+      lines.push('', 'POSSIBLE SYMPTOMS TO ASK ABOUT (AI SUGGESTIONS — NOT THE PATIENT\'S WORDS):');
+      possible.forEach((item) => lines.push(`- ${item}`));
+    }
 
     lines.push(
       '',
@@ -300,83 +302,31 @@ window.VOICECARE_PDF = (() => {
       y += flagHeight + 6;
     }
 
-    // Two columns: patient's language and English
-    const gutter = 8;
-    const columnWidth = (maxWidth - gutter) / 2;
-
-    const drawColumnHeaders = () => {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(15, 118, 110);
-      doc.text(toPdfAscii(`PATIENT'S LANGUAGE (${safePdfLanguageLabel(entry)})`), margin, y);
-      doc.text('ENGLISH VERSION', margin + columnWidth + gutter, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(30, 41, 59);
-      y += 4.5;
-      doc.setDrawColor(203, 213, 225);
-      doc.line(margin, y, margin + maxWidth, y);
-      y += 5;
-    };
-
-    drawColumnHeaders();
-    let leftY = y;
-    let rightY = y;
-
-    const drawColumnSection = (key, title, nativeValue, englishValue) => {
-      const nativeText = sectionValueText(nativeValue);
-      const englishText = sectionValueText(englishValue);
-
-      const nativeHeight = 5.5 + measureBlockHeightMm(nativeText, columnWidth - 2, 10);
-      const englishHeight = 5.5 + measureBlockHeightMm(englishText, columnWidth - 2, 10);
-      const needed = Math.max(nativeHeight, englishHeight) + 4;
-
-      if (Math.max(leftY, rightY) + needed > 278) {
-        doc.addPage();
-        y = 18;
-        leftY = y;
-        rightY = y;
-        drawColumnHeaders();
-        leftY = y;
-        rightY = y;
-      }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9.5);
-      doc.setTextColor(15, 118, 110);
-      doc.text(toPdfAscii(title), margin, leftY);
-      doc.text(toPdfAscii(title), margin + columnWidth + gutter, rightY);
-      doc.setTextColor(30, 41, 59);
-
-      leftY = drawTextBlock(doc, nativeText, margin, leftY + 5, columnWidth - 2, { fontSize: 10 });
-      rightY = drawTextBlock(doc, englishText, margin + columnWidth + gutter, rightY + 5, columnWidth - 2, { fontSize: 10 });
-      leftY += 4;
-      rightY += 4;
-    };
+    // One column, English only. The patient's exact words stay in the app.
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 118, 110);
+    doc.text('SUMMARY (ENGLISH)', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59);
+    y += 4.5;
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, y, margin + maxWidth, y);
+    y += 5;
 
     SECTIONS.forEach(([key, title]) => {
-      drawColumnSection(
-        key,
-        title,
-        entry.summary?.[key],
-        entry.englishSummary?.[key] ?? entry.summary?.[key]
-      );
-    });
+      const text = sectionValueText(entry.englishSummary?.[key] ?? entry.summary?.[key]);
+      const blockHeight = 5.5 + measureBlockHeightMm(text, maxWidth - 2, 10);
+      ensureSpace(blockHeight + 4);
 
-    y = Math.max(leftY, rightY) + 2;
-
-    // Patient's exact words
-    if (entry.patientText) {
-      const blockHeight = 6 + measureBlockHeightMm(entry.patientText, maxWidth - 6, 9.5);
-      ensureSpace(blockHeight + 6);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9.5);
       doc.setTextColor(15, 118, 110);
-      doc.text("PATIENT'S EXACT WORDS (UNEDITED)", margin, y);
-      y += 5;
+      doc.text(toPdfAscii(title), margin, y);
       doc.setTextColor(30, 41, 59);
-      y = drawTextBlock(doc, entry.patientText, margin, y, maxWidth - 6, { fontSize: 9.5, colour: '#475569' });
-      y += 5;
-    }
+      y = drawTextBlock(doc, text, margin, y + 5, maxWidth - 2, { fontSize: 10 });
+      y += 4;
+    });
 
     // Follow-up answers
     const answers = (entry.followUpAnswers || []).filter((a) => a && a.answer);
@@ -393,29 +343,28 @@ window.VOICECARE_PDF = (() => {
       y += 4;
     }
 
-    // QR code
-    if (entry.shareUrl && window.VOICECARE_SHARE?.drawQr) {
-      const canvas = document.createElement('canvas');
-      window.VOICECARE_SHARE.drawQr(canvas, entry.shareUrl);
-      ensureSpace(32);
-      doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, y, 24, 24);
+    // AI-suggested symptoms, clearly separated from the patient's own words.
+    const possible = (Array.isArray(entry.possibleSymptoms) ? entry.possibleSymptoms : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (possible.length) {
+      ensureSpace(20);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
+      doc.setFontSize(9.5);
       doc.setTextColor(15, 118, 110);
-      doc.text('SCAN TO OPEN THE READ-ONLY SUMMARY', margin + 28, y + 5);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(51, 65, 85);
-      const urlLines = doc.splitTextToSize(entry.shareUrl, maxWidth - 30);
-      doc.text(urlLines.slice(0, 2), margin + 28, y + 10);
-      const expiry = entry.shareExpiresAt
-        ? new Date(entry.shareExpiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
-        : '';
-      if (expiry) {
-        doc.setFontSize(7.5);
-        doc.text(`Link expires: ${toPdfAscii(expiry)} (24 hours)`, margin + 28, y + 17);
-      }
-      y += 28;
+      doc.text('POSSIBLE SYMPTOMS TO ASK ABOUT (AI SUGGESTIONS)', margin, y);
+      y += 4.5;
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Not the patient\'s words and not a diagnosis. Confirm with the patient.', margin, y);
+      y += 5;
+      doc.setTextColor(30, 41, 59);
+      y = drawTextBlock(doc, possible.map((item) => `- ${item}`).join('\n'), margin, y, maxWidth - 2, {
+        fontSize: 9.5
+      });
+      y += 4;
     }
 
     // Disclaimer

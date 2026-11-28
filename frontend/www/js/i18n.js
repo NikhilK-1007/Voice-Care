@@ -8,18 +8,18 @@ window.VOICECARE_I18N = {
   en: {
     langName: 'English',
     nativeName: 'English',
-    tagline: 'Speak naturally. Let AI organise. Help your doctor understand.',
+    tagline: 'Record the complaint. Get an English summary and symptoms to ask about.',
     greeting: 'Namaste',
-    homeSubtitle: 'Prepare a clear health summary before meeting your doctor.',
+    homeSubtitle: "Record the patient's complaint in any language and get a doctor-ready English summary.",
     startDescribeTitle: 'Describe Your Health Concern',
     startDescribeDesc: 'Speak in your own language, or type',
-    voiceTitle: 'Tap to speak',
-    voiceSub: 'Speak in any Indian language. We write it down; you can edit every word.',
+    voiceTitle: 'Tap to record',
+    voiceSub: 'Record the patient in any Indian language. We write it down; you can edit every word.',
     voiceStart: 'Tap to speak',
     voiceStop: 'Tap to stop',
     voiceListening: 'Listening… tap to stop',
     voiceWriting: 'Writing down what you said…',
-    voiceDone: 'Added to your description. Check the words, then create the summary.',
+    voiceDone: 'Added to the complaint. Check the words, then create the summary.',
     voiceEmpty: 'We could not hear any words. Please try again, a little closer to the mic.',
     voiceTooShort: 'That was too short. Please speak for a few seconds.',
     voiceDenied:
@@ -27,24 +27,24 @@ window.VOICECARE_I18N = {
     voiceUnsupported: 'This device cannot record audio here. Please type instead.',
     voiceUploadFailed: 'Could not write down the recording. Check your connection and try again.',
     inputPageSub:
-      'Tap the mic and speak, or type. Short, everyday words are enough — we organise the rest.',
+      'Tap the mic and record the patient, or type. Short, everyday words are enough — we organise the rest.',
     inputPlaceholder:
-      'Example: I have had fever and body pain since 3 days. I take blood pressure tablets every morning...',
-    generateBtn: 'Generate Health Summary',
+      'Example: Patient has had fever and body pain for 3 days. Takes blood pressure tablets every morning...',
+    generateBtn: 'Generate Summary',
     clearBtn: 'Clear',
     langContinueBtn: 'Continue to health description',
-    inputLangNote: 'You can type or edit in English, हिन्दी or ಕನ್ನಡ.',
+    inputLangNote: 'Type or edit in English, हिन्दी or ಕನ್ನಡ.',
     sampleHeading: 'Try a sample description (for demo testing):',
     sampleText:
       'I have had a dull headache and mild fever for 3 days, mostly in the evening. I also have diabetes and take Metformin 500mg after breakfast. I feel very tired when walking.',
-    processingTitle: 'Organising Your Health Summary...',
+    processingTitle: 'Preparing the clinical summary...',
     processingSubtitle:
-      'VoiceCare AI is structuring your concerns clearly for your doctor without changing your meaning.',
+      'VoiceCare AI is structuring the complaint in English without changing its meaning.',
     disclaimerShort:
-      'For doctor communication only — not a medical diagnosis or prescription.',
+      'A communication aid for clinicians — not a diagnosis or prescription.',
     navHome: 'Home',
-    navDescribe: 'Speak',
-    navProfile: 'My info',
+    navDescribe: 'Record',
+    navProfile: 'Patients',
     navHistory: 'History',
     navAbout: 'Settings'
   },
@@ -85,7 +85,7 @@ window.VOICECARE_I18N = {
       'केवल डॉक्टर से बातचीत में मदद के लिए — यह कोई मेडिकल निदान या प्रिस्क्रिप्शन नहीं है।',
     navHome: 'होम',
     navDescribe: 'बोलें',
-    navProfile: 'मेरी जानकारी',
+    navProfile: 'मरीज़',
     navHistory: 'इतिहास',
     navAbout: 'सेटिंग्स'
   },
@@ -126,7 +126,7 @@ window.VOICECARE_I18N = {
       'ವೈದ್ಯರೊಂದಿಗೆ ಸಂವಹನಕ್ಕಾಗಿ ಮಾತ್ರ — ಇದು ವೈದ್ಯಕೀಯ ರೋಗನಿರ್ಣಯವಲ್ಲ.',
     navHome: 'ಮುಖಪುಟ',
     navDescribe: 'ಮಾತನಾಡಿ',
-    navProfile: 'ನನ್ನ ಮಾಹಿತಿ',
+    navProfile: 'ರೋಗಿಗಳು',
     navHistory: 'ಇತಿಹಾಸ',
     navAbout: 'ಸೆಟ್ಟಿಂಗ್ಸ್'
   }

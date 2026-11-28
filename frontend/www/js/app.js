@@ -17,7 +17,6 @@
     edit: { title: 'Edit Summary', topbar: false, bottomNav: false },
     pdf: { title: 'PDF Preview & Share', topbar: false, bottomNav: false },
     profile: { title: 'My Information', topbar: false, bottomNav: true },
-    followup: { title: 'Follow-up Questions', topbar: false, bottomNav: false },
     history: { title: 'Patient History', topbar: false, bottomNav: true },
     doctor: { title: 'Doctor view', topbar: true, bottomNav: true },
     notes: { title: 'Visit notes', topbar: true, bottomNav: false },
@@ -38,13 +37,15 @@
     syncing: false,
     lastSyncAt: 0,
     syncStatusText: '',
-    // Follow-up step: the description waiting to be summarised and the answers
-    // the patient gave (skipped questions contribute nothing).
-    pendingPatientText: '',
+    // Kept for old saved entries that still carry answers from the removed
+    // follow-up step; the app no longer asks any questions.
     pendingFollowUpAnswers: [],
-    followUpQuestions: [],
     // Visit notes / photos are edited against one saved visit at a time.
-    notesEntryId: null
+    notesEntryId: null,
+    // Patient record currently open in the form (null = adding a new patient).
+    editingPatientId: null,
+    // Prescription files attached while the patient form is open.
+    pendingRx: []
   };
 
   // DOM helpers
@@ -127,7 +128,7 @@
     $('home-subtitle').textContent = t.homeSubtitle;
     const homeDescribeBtn = $('btn-home-describe');
     if (homeDescribeBtn) {
-      const label = lang === 'en' || lang === 'auto' ? 'Start speaking' : t.voiceStart || 'Start speaking';
+      const label = lang === 'en' || lang === 'auto' ? 'New consultation' : t.voiceStart || 'New consultation';
       homeDescribeBtn.innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg> ${escapeHtml(label)}`;
     }
     $('home-active-lang-label').textContent = t.nativeName;
@@ -162,7 +163,7 @@
     $('processing-subtitle').textContent = t.processingSubtitle;
     $('nav-label-home').textContent = t.navHome;
     $('nav-label-input').textContent = t.navDescribe;
-    $('nav-label-profile').textContent = t.navProfile || 'My info';
+    $('nav-label-profile').textContent = t.navProfile || 'Patients';
     $('nav-label-history').textContent = t.navHistory;
     $('nav-label-about').textContent = t.navAbout;
 
@@ -221,7 +222,7 @@
       maybeAutoSync();
     }
     if (screenName === 'profile') {
-      renderProfileForm();
+      renderPatientScreen();
       maybeAutoSync();
     }
     if (screenName === 'history') {
@@ -255,7 +256,11 @@
     const hasProfile = Boolean(profile.name || profile.age || profile.bloodGroup);
     $('home-profile-summary').textContent = hasProfile
       ? quickInfoLine(profile)
-      : 'Add name, age, blood group';
+      : 'Add a patient record';
+    const patientCount = window.VOICECARE_STORAGE.getPatients().length;
+    if (hasProfile && patientCount > 1) {
+      $('home-profile-summary').textContent = `${profile.name || 'Active patient'} · ${patientCount} patients`;
+    }
     $('home-history-count').textContent = `${history.length} saved visit${history.length === 1 ? '' : 's'}`;
 
     const reviewed = history.filter((item) => item.reviewedAt).length;
@@ -272,6 +277,16 @@
     }
   }
 
+  /**
+   * The only summary VoiceCare shows is the English one, whatever language the
+   * patient spoke. Returns null when the AI could not translate this visit.
+   */
+  function englishSummarySections(entry) {
+    if (!entry?.englishSummary) return null;
+    if (entry.metadata?.englishIsGenerated === false) return null;
+    return entry.englishSummary;
+  }
+
   /** One-line patient identity used on the home tile, summary and PDF. */
   function quickInfoLine(profile = {}) {
     const parts = [];
@@ -283,14 +298,168 @@
     return parts.join(' · ');
   }
 
-  function renderProfileForm() {
-    const profile = window.VOICECARE_STORAGE.getProfile();
-    $('profile-name').value = profile.name || '';
-    $('profile-age').value = profile.age || '';
-    $('profile-gender').value = profile.gender || '';
-    $('profile-blood').value = profile.bloodGroup || '';
-    $('profile-allergies').value = profile.allergies || '';
-    $('profile-emergency').value = profile.emergencyContact || '';
+  const RX_MAX_FILES = 6;
+  // A PDF is stored as a base64 data URL in localStorage, which has a small
+  // shared quota; images are shrunk first, documents are size-checked.
+  const RX_MAX_DOCUMENT_BYTES = 1.2 * 1024 * 1024;
+
+  function patientMetaLine(patient = {}) {
+    return [
+      patient.age ? `${patient.age} yrs` : '',
+      patient.gender || '',
+      patient.bloodGroup ? `Blood group ${patient.bloodGroup}` : '',
+      patient.allergies ? `Allergies: ${patient.allergies}` : '',
+      patient.emergencyContact ? `Emergency: ${patient.emergencyContact}` : ''
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  /** Saved patient records, newest last, with the active one highlighted. */
+  function renderPatientScreen() {
+    const container = $('patient-list');
+    if (!container) return;
+    const patients = window.VOICECARE_STORAGE.getPatients();
+    const activeId = window.VOICECARE_STORAGE.getActivePatientId();
+    $('patient-empty')?.classList.toggle('hidden', patients.length > 0);
+
+    container.innerHTML = patients
+      .map((patient) => {
+        const active = patient.id === activeId;
+        const files = window.VOICECARE_STORAGE.getPrescriptions(patient.id);
+        const thumbs = files
+          .slice(0, 4)
+          .map((file) =>
+            file.kind === 'image'
+              ? `<img class="photo-thumb-sm" src="${escapeHtml(file.dataUrl)}" alt="Prescription photo" />`
+              : `<span class="rx-doc-chip">PDF</span>`
+          )
+          .join('');
+        return `
+          <article class="patient-card${active ? ' is-active' : ''}">
+            <div class="patient-head">
+              <div>
+                <p class="patient-name">${escapeHtml(patient.name || 'Unnamed patient')}</p>
+                <p class="patient-meta">${escapeHtml(patientMetaLine(patient) || 'No age, blood group or allergy recorded')}</p>
+              </div>
+              ${active ? '<span class="badge badge-ok">Active</span>' : ''}
+            </div>
+            ${
+              files.length
+                ? `<div class="photo-strip">${thumbs}${files.length > 4 ? `<span class="rx-doc-chip">+${files.length - 4}</span>` : ''}</div>`
+                : '<p class="panel-sub">No prescription attached.</p>'
+            }
+            <div class="item-actions">
+              <button class="btn btn-secondary btn-sm" data-patient-edit="${escapeHtml(patient.id)}" type="button">Edit</button>
+              ${active ? '' : `<button class="btn btn-quiet btn-sm" data-patient-use="${escapeHtml(patient.id)}" type="button">Use</button>`}
+              <button class="btn btn-danger btn-sm" data-patient-delete="${escapeHtml(patient.id)}" type="button">Delete</button>
+            </div>
+          </article>`;
+      })
+      .join('');
+  }
+
+  function openPatientForm(patient) {
+    state.editingPatientId = patient?.id || null;
+    state.pendingRx = patient ? window.VOICECARE_STORAGE.getPrescriptions(patient.id) : [];
+
+    $('patient-form-title').textContent = patient ? 'Edit patient' : 'New patient';
+    $('profile-name').value = patient?.name || '';
+    $('profile-age').value = patient?.age || '';
+    $('profile-gender').value = patient?.gender || '';
+    $('profile-blood').value = patient?.bloodGroup || '';
+    $('profile-allergies').value = patient?.allergies || '';
+    $('profile-emergency').value = patient?.emergencyContact || '';
+    renderPendingPrescriptions();
+
+    $('profile-form-wrap').classList.remove('hidden');
+    $('btn-add-patient')?.classList.add('hidden');
+    $('patient-list')?.classList.add('hidden');
+    $('patient-empty')?.classList.add('hidden');
+    $('profile-form-wrap').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  function closePatientForm() {
+    $('profile-form-wrap')?.classList.add('hidden');
+    $('btn-add-patient')?.classList.remove('hidden');
+    $('patient-list')?.classList.remove('hidden');
+    state.editingPatientId = null;
+    state.pendingRx = [];
+    $('profile-form')?.reset();
+    renderPatientScreen();
+  }
+
+  function renderPendingPrescriptions() {
+    const list = $('rx-list');
+    if (!list) return;
+    if (!state.pendingRx.length) {
+      list.innerHTML = '<p class="panel-sub">No prescription attached yet.</p>';
+      return;
+    }
+    list.innerHTML = state.pendingRx
+      .map((file) =>
+        file.kind === 'image'
+          ? `<figure class="photo-item">
+               <img class="photo-thumb" src="${escapeHtml(file.dataUrl)}" alt="Prescription photo" />
+               <button class="photo-remove" type="button" data-rx-remove="${escapeHtml(file.id)}" aria-label="Remove prescription">×</button>
+             </figure>`
+          : `<div class="rx-doc-row">
+               <span class="rx-doc-chip">PDF</span>
+               <span class="rx-doc-name">${escapeHtml(file.name || 'Prescription document')}</span>
+               <button class="photo-remove photo-remove-inline" type="button" data-rx-remove="${escapeHtml(file.id)}" aria-label="Remove prescription">×</button>
+             </div>`
+      )
+      .join('');
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read that file.'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** Adds prescription photos/documents to the patient being edited. */
+  async function addPrescriptionFiles(files) {
+    for (const file of Array.from(files || [])) {
+      if (state.pendingRx.length >= RX_MAX_FILES) {
+        showToast(`A patient can have up to ${RX_MAX_FILES} prescription files.`);
+        break;
+      }
+      const isImage = String(file.type || '').startsWith('image/');
+      try {
+        if (isImage) {
+          const dataUrl = await shrinkImage(file);
+          state.pendingRx.push({
+            id: `rx_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            kind: 'image',
+            name: file.name || 'Prescription photo',
+            dataUrl,
+            addedAt: new Date().toISOString()
+          });
+        } else if (file.type === 'application/pdf') {
+          if (file.size > RX_MAX_DOCUMENT_BYTES) {
+            showToast('That PDF is too large. Please choose one under 1.2 MB, or take a photo instead.');
+            continue;
+          }
+          const dataUrl = await readFileAsDataUrl(file);
+          state.pendingRx.push({
+            id: `rx_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            kind: 'document',
+            name: file.name || 'Prescription document',
+            dataUrl,
+            addedAt: new Date().toISOString()
+          });
+        } else {
+          showToast('Only photos or PDF documents can be attached.');
+        }
+      } catch (err) {
+        showToast(err.message || 'Could not attach that file.');
+      }
+    }
+    renderPendingPrescriptions();
   }
 
   function updateInputMeta() {
@@ -346,9 +515,7 @@
       entry.metadata?.disclaimer ||
       'For doctor communication only — not a medical diagnosis or prescription.';
 
-    const languageLabel = entry.languageLabel || 'English';
-    $('summary-lang-badge').textContent = languageLabel;
-    $('summary-native-label').textContent = `Your words · ${languageLabel}`;
+    $('summary-lang-badge').textContent = 'English';
 
     const meta = entry.metadata || {};
     $('summary-source-badge').textContent =
@@ -356,28 +523,17 @@
         ? `Organised with Gemini AI${meta.model ? ` · ${meta.model}` : ''}`
         : `Basic local extractor used — the AI model was unavailable. Tap Regenerate to try again.`;
 
-    // The English pane is what a doctor who does not read the patient's language
-    // relies on. Show a clear notice instead of quietly repeating the native text.
-    const englishReady =
-      Boolean(entry.englishSummary) && entry.metadata?.englishIsGenerated !== false;
-
-    $('summary-sections-container').innerHTML = buildSummarySectionHtml(entry.summary || {});
-    $('summary-english-container').innerHTML = englishReady
-      ? buildSummarySectionHtml(entry.englishSummary)
+    // English only. The patient's own words are still one tap away in the
+    // "Patient's words" tab, but no second-language summary is ever shown.
+    const english = englishSummarySections(entry);
+    $('summary-english-container').innerHTML = english
+      ? buildSummarySectionHtml(english)
       : `<div class="alert alert-warning" style="display: block;">
-           <p class="alert-title">English version not ready</p>
-           <p>The AI could not translate this summary yet. Tap <strong>Regenerate</strong> to try again, or use Share PDF to hand over your exact words.</p>
+           <p class="alert-title">English summary not ready</p>
+           <p>The AI could not translate this visit yet. Tap <strong>Regenerate</strong> to try again.</p>
          </div>`;
 
-    // Put English first whenever the patient did not speak English: that is the
-    // version the doctor needs to read.
-    const pane = $('summary-ai-pane');
-    const nativeBlock = $('summary-native-block');
-    const englishBlock = pane?.querySelector('.summary-lang-english');
-    if (pane && nativeBlock && englishBlock) {
-      if ((entry.language || 'en') !== 'en') pane.insertBefore(englishBlock, nativeBlock);
-      else pane.insertBefore(nativeBlock, englishBlock);
-    }
+    renderPossibleSymptoms(entry);
 
     renderQuickInfoStrip(entry);
     renderOriginalWords(entry);
@@ -408,7 +564,25 @@
       .map((flag) => `<li>${escapeHtml(flag)}</li>`)
       .join('');
     $('summary-emergency-text').textContent =
-      'These are your own words, repeated so your doctor sees them first. VoiceCare does not decide how serious they are.';
+      "These are the patient's own words, repeated so they are seen first. VoiceCare does not decide how serious they are.";
+  }
+
+  /** AI suggestions, kept visually separate from the patient's own symptoms. */
+  function renderPossibleSymptoms(entry) {
+    const panel = $('summary-possible-panel');
+    const list = $('summary-possible-list');
+    if (!panel || !list) return;
+    const items = (Array.isArray(entry.possibleSymptoms) ? entry.possibleSymptoms : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    if (!items.length) {
+      panel.classList.add('hidden');
+      list.innerHTML = '';
+      return;
+    }
+    panel.classList.remove('hidden');
+    list.innerHTML = items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   }
 
   function renderQuickInfoStrip(entry) {
@@ -458,7 +632,9 @@
   function populateEditForm() {
     const entry = state.currentEntry;
     if (!entry) return;
-    const s = entry.summary;
+    // The form edits the English summary the doctor reads, because that is the
+    // only summary the app shows or shares.
+    const s = entry.englishSummary || entry.summary || {};
 
     $('edit-main-concern').value = s.mainHealthConcern || '';
     $('edit-symptoms').value = (s.symptoms || []).join('\n');
@@ -483,7 +659,7 @@
       timeStyle: 'short'
     });
     const infoLine = window.VOICECARE_PDF?.patientLine?.(entry) || '';
-    $('pdf-meta-line').textContent = `${infoLine ? `${infoLine} • ` : ''}Prepared: ${dateStr} • Language: ${entry.languageLabel || 'English'}`;
+    $('pdf-meta-line').textContent = `${infoLine ? `${infoLine} • ` : ''}Prepared: ${dateStr}`;
 
     const flags = (Array.isArray(entry.urgentFlags) ? entry.urgentFlags : []).filter(Boolean);
     const flagHtml = flags.length
@@ -494,20 +670,30 @@
          </section>`
       : '';
 
-    const original = entry.patientText
-      ? `<section class="panel">
-           <p class="section-label" style="margin-top: 0;">Patient's exact words</p>
-           <p class="original-text">${escapeHtml(entry.patientText)}</p>
-         </section>`
+    const english = englishSummarySections(entry);
+
+    const possible = (Array.isArray(entry.possibleSymptoms) ? entry.possibleSymptoms : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 6);
+    const possibleHtml = possible.length
+      ? `<div class="possible-panel" style="margin-top: 12px;">
+           <p class="summary-lang-label">Possible symptoms to ask about</p>
+           <p class="panel-sub">AI suggestions — not the patient's words. Not a diagnosis.</p>
+           <ul class="record-list">${possible.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+         </div>`
       : '';
 
     $('pdf-preview-body').innerHTML = `
       ${flagHtml}
-      <p class="summary-lang-label">Patient's language · ${escapeHtml(entry.languageLabel || 'English')}</p>
-      ${buildSummarySectionHtml(entry.summary || {})}
-      <p class="summary-lang-label">English version</p>
-      ${buildSummarySectionHtml(entry.englishSummary || entry.summary || {})}
-      ${original}
+      <p class="summary-lang-label">Summary for the doctor · English</p>
+      ${english
+        ? buildSummarySectionHtml(english)
+        : `<div class="alert alert-warning" style="display: block;">
+             <p class="alert-title">English summary not ready</p>
+             <p>Tap Regenerate to try the translation again.</p>
+           </div>`}
+      ${possibleHtml}
     `;
   }
 
@@ -558,10 +744,15 @@
         patientName: state.user?.name || '',
         patientText,
         language: state.language,
-        languageLabel: langObj.nativeName,
+        // Follow the words the patient actually used, not the menu language: a
+        // patient can type Hindi while the app itself is in English.
+        detectedLanguage: result.metadata?.detectedLanguage || state.language,
+        languageLabel: result.metadata?.detectedLanguageLabel || langObj.nativeName,
         summary: result.summary,
         englishSummary: result.englishSummary,
         urgentFlags: Array.isArray(result.urgentFlags) ? result.urgentFlags : [],
+        // AI suggestions shown separately from the patient's own symptoms.
+        possibleSymptoms: Array.isArray(result.possibleSymptoms) ? result.possibleSymptoms : [],
         missingInfo: Array.isArray(result.missingInfo) ? result.missingInfo : [],
         followUpAnswers: state.pendingFollowUpAnswers,
         // Snapshot the quick-info card so an old summary keeps the details it
@@ -770,11 +961,17 @@
     updateInputMeta();
   }
 
+  /** English concern, used everywhere the doctor reads a visit title. */
+  function entryConcern(entry) {
+    return entry?.englishSummary?.mainHealthConcern || entry?.summary?.mainHealthConcern || 'Health summary';
+  }
+
   function renderHistory() {
     const query = ($('history-search').value || '').trim().toLowerCase();
     const list = window.VOICECARE_STORAGE.getHistory().filter((item) => {
       if (!query) return true;
-      const hay = `${item.summary?.mainHealthConcern || ''} ${item.patientText || ''} ${(item.summary?.symptoms || []).join(' ')}`.toLowerCase();
+      const english = item.englishSummary || {};
+      const hay = `${english.mainHealthConcern || ''} ${(english.symptoms || []).join(' ')} ${item.patientText || ''}`.toLowerCase();
       return hay.includes(query);
     });
 
@@ -797,7 +994,7 @@
         return `
           <div class="item">
             <div class="item-head">
-              <span class="item-title">${escapeHtml(item.summary?.mainHealthConcern || 'Health summary')}</span>
+              <span class="item-title">${escapeHtml(entryConcern(item))}</span>
               <span class="badge">${escapeHtml(item.languageLabel || 'English')}</span>
             </div>
             <p class="item-meta">
@@ -896,8 +1093,8 @@
               </div>
               <span class="badge${reviewed ? ' badge-ok' : ''}">${reviewed ? 'Reviewed' : 'New'}</span>
             </div>
-            <p class="doctor-concern">${escapeHtml(entry.summary?.mainHealthConcern || 'Health summary')}</p>
-            <p class="doctor-meta">${escapeHtml(formatEntryDate(entry))} · ${escapeHtml(entry.languageLabel || 'English')}</p>
+            <p class="doctor-concern">${escapeHtml(entryConcern(entry))}</p>
+            <p class="doctor-meta">${escapeHtml(formatEntryDate(entry))}</p>
             ${flags.length ? `<ul class="urgent-flag-list">${flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join('')}</ul>` : ''}
             ${entry.doctorNote ? `<p class="doctor-note"><strong>Doctor's note:</strong> ${escapeHtml(entry.doctorNote)}</p>` : ''}
             ${entry.prescribedMeds ? `<p class="doctor-note"><strong>Medicines:</strong> ${escapeHtml(entry.prescribedMeds)}</p>` : ''}
@@ -937,7 +1134,7 @@
   function renderNotesScreen() {
     const entry = window.VOICECARE_STORAGE.getHistory().find((item) => item.id === state.notesEntryId);
     if (!entry) return;
-    $('notes-subtitle').textContent = `${entry.summary?.mainHealthConcern || 'This visit'} · ${formatEntryDate(entry)}`;
+    $('notes-subtitle').textContent = `${entryConcern(entry)} · ${formatEntryDate(entry)}`;
     $('note-doctor-said').value = entry.doctorNote || '';
     $('note-medicines').value = entry.prescribedMeds || '';
     $('note-next-visit').value = String(entry.nextVisitAt || '').slice(0, 10);
@@ -1065,7 +1262,7 @@
                 <span class="timeline-dot${entry.reviewedAt ? ' is-reviewed' : ''}" aria-hidden="true"></span>
                 <button class="timeline-card" type="button" data-timeline-open="${escapeHtml(entry.id)}">
                   <span class="timeline-date">${escapeHtml(formatEntryDate(entry))}</span>
-                  <span class="timeline-title">${escapeHtml(entry.summary?.mainHealthConcern || 'Health summary')}</span>
+                  <span class="timeline-title">${escapeHtml(entryConcern(entry))}</span>
                   <span class="timeline-meta">${escapeHtml(entry.languageLabel || 'English')}${entry.reviewedAt ? ' · Reviewed' : ''}${(entry.urgentFlags || []).length ? ' · Urgent words' : ''}</span>
                 </button>
               </li>`
@@ -1081,103 +1278,6 @@
     const banner = $('offline-banner');
     if (!banner) return;
     banner.classList.toggle('hidden', navigator.onLine !== false);
-  }
-
-  /**
-   * Renders one skippable card per follow-up question, each with its own answer
-   * box (typed or dictated).
-   * @param {string[]} questions
-   */
-  function renderFollowUpForm(questions) {
-    const container = $('followup-list');
-    container.innerHTML = questions
-      .map(
-        (question, index) => `
-      <section class="followup-card" data-fu-card="${index}">
-        <p class="followup-question"><span class="followup-number">${index + 1}</span>${escapeHtml(question)}</p>
-        <textarea
-          id="fu-answer-${index}"
-          class="textarea"
-          rows="2"
-          maxlength="300"
-          placeholder="Type your answer, or tap Speak answer"
-        ></textarea>
-        <div class="inline-pills" style="margin-top: 8px;">
-          <button class="btn btn-secondary btn-sm" data-fu-mic="${index}" type="button">
-            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg>
-            Speak answer
-          </button>
-          <button class="btn btn-quiet btn-sm" data-fu-skip="${index}" type="button">Skip</button>
-        </div>
-      </section>`
-      )
-      .join('');
-
-    container.querySelectorAll('[data-fu-mic]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const index = btn.getAttribute('data-fu-mic');
-        window.VOICECARE_VOICE?.setTarget?.(`fu-answer-${index}`);
-        window.VOICECARE_VOICE?.toggle?.();
-      });
-    });
-
-    container.querySelectorAll('[data-fu-skip]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const index = btn.getAttribute('data-fu-skip');
-        const area = $(`fu-answer-${index}`);
-        if (area) area.value = '';
-        container.querySelector(`[data-fu-card="${index}"]`)?.classList.add('is-skipped');
-      });
-    });
-  }
-
-  /** Only answers the patient actually gave are sent; a skip contributes nothing. */
-  function collectFollowUpAnswers() {
-    const answers = [];
-    state.followUpQuestions.forEach((question, index) => {
-      const area = $(`fu-answer-${index}`);
-      const answer = area ? String(area.value || '').trim() : '';
-      if (answer) answers.push({ question, answer: answer.slice(0, 300) });
-    });
-    return answers;
-  }
-
-  /**
-   * Asks the backend what is missing, then either shows the questions or goes
-   * straight to the summary when the description is already complete.
-   * @param {string} patientText
-   */
-  async function startFollowUpStep(patientText) {
-    state.pendingPatientText = patientText;
-    state.pendingFollowUpAnswers = [];
-    state.followUpQuestions = [];
-
-    abortActiveSummaryRequest();
-    navigate('processing');
-
-    try {
-      const data = await window.VOICECARE_API.getFollowUpQuestions({
-        patientText,
-        language: state.language
-      });
-
-      const questions = (Array.isArray(data?.followUpQuestions) ? data.followUpQuestions : [])
-        .filter((q) => typeof q === 'string' && q.trim())
-        .slice(0, 3);
-
-      if (!questions.length) {
-        runAiSummarization({ patientText, endpoint: 'summarize' });
-        return;
-      }
-
-      state.followUpQuestions = questions;
-      renderFollowUpForm(questions);
-      $('followup-status').textContent = '';
-      navigate('followup');
-    } catch {
-      // The question step must never block a patient from getting a summary.
-      runAiSummarization({ patientText, endpoint: 'summarize' });
-    }
   }
 
   function wireEvents() {
@@ -1638,50 +1738,102 @@
       }
 
       state.currentEntry = null;
-      startFollowUpStep(text);
+      state.pendingFollowUpAnswers = [];
+      runAiSummarization({ patientText: text, endpoint: 'summarize' });
     });
 
-    // 5b. Follow-up questions — answers are optional, skipping is always allowed.
-    function submitFollowUp(withAnswers) {
-      if (window.VOICECARE_VOICE?.isRecording?.()) window.VOICECARE_VOICE.stop();
-      if (window.VOICECARE_VOICE?.isBusy?.()) {
-        showToast('Please wait while your answer is written down.');
-        return;
-      }
-      window.VOICECARE_VOICE?.setTarget?.('patient-input-box');
-      state.pendingFollowUpAnswers = withAnswers ? collectFollowUpAnswers() : [];
-      runAiSummarization({
-        patientText: state.pendingPatientText || inputBox.value.trim(),
-        endpoint: 'summarize'
-      });
-    }
-
-    $('btn-followup-continue')?.addEventListener('click', () => submitFollowUp(true));
-    $('btn-followup-skip')?.addEventListener('click', () => submitFollowUp(false));
-
-    // 5c. Quick-info card — saved once, attached to every summary and PDF.
+    // 5b. Patient records — add or edit one patient, with their prescription.
     $('profile-form')?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const profile = window.VOICECARE_STORAGE.saveProfile({
-        name: $('profile-name').value,
+      const name = String($('profile-name').value || '').trim();
+      if (!name) {
+        showToast("Please enter the patient's name.");
+        $('profile-name').focus();
+        return;
+      }
+
+      const patient = window.VOICECARE_STORAGE.savePatient({
+        id: state.editingPatientId,
+        name,
         age: $('profile-age').value,
         gender: $('profile-gender').value,
         bloodGroup: $('profile-blood').value,
         allergies: $('profile-allergies').value,
         emergencyContact: $('profile-emergency').value
       });
+      window.VOICECARE_STORAGE.savePrescriptions(patient.id, state.pendingRx);
+      window.VOICECARE_STORAGE.setActivePatient(patient.id);
+      const profile = window.VOICECARE_STORAGE.getProfile();
+
+      closePatientForm();
       renderHomeStats();
       if (state.currentEntry && state.currentScreen === 'summary') renderSummaryScreen();
-      // The card is account data, so keep a copy in Supabase too (never inside
-      // a summary); a new phone fills its blank card from there.
+
+      // The active patient is account data, so keep a copy in Supabase too (never
+      // inside a summary); a new phone fills its blank record from there.
       if (state.user?.mode === 'supabase') {
         window.VOICECARE_SUPABASE?.syncProfileToCloud?.(state.user, profile)?.catch?.(() => {});
       }
+      const rxCount = window.VOICECARE_STORAGE.getPrescriptions(patient.id).length;
       showToast(
-        profile.name
-          ? `Saved. ${profile.name}'s details will appear on every summary.`
-          : 'Saved. These details will appear on every summary.'
+        `${patient.name} saved as the active patient${rxCount ? ` · ${rxCount} prescription file${rxCount === 1 ? '' : 's'}` : ''}.`
       );
+    });
+
+    $('btn-add-patient')?.addEventListener('click', () => openPatientForm(null));
+    $('btn-cancel-patient')?.addEventListener('click', () => closePatientForm());
+
+    $('patient-list')?.addEventListener('click', (event) => {
+      const editBtn = event.target.closest('[data-patient-edit]');
+      if (editBtn) {
+        const patient = window.VOICECARE_STORAGE.getPatients().find(
+          (item) => item.id === editBtn.getAttribute('data-patient-edit')
+        );
+        if (patient) openPatientForm(patient);
+        return;
+      }
+      const useBtn = event.target.closest('[data-patient-use]');
+      if (useBtn) {
+        const id = useBtn.getAttribute('data-patient-use');
+        window.VOICECARE_STORAGE.setActivePatient(id);
+        const patient = window.VOICECARE_STORAGE.getPatients().find((item) => item.id === id);
+        renderPatientScreen();
+        renderHomeStats();
+        showToast(`${patient?.name || 'Patient'} is now the active patient.`);
+        return;
+      }
+      const deleteBtn = event.target.closest('[data-patient-delete]');
+      if (deleteBtn) {
+        const id = deleteBtn.getAttribute('data-patient-delete');
+        const patient = window.VOICECARE_STORAGE.getPatients().find((item) => item.id === id);
+        if (!patient) return;
+        if (!window.confirm(`Delete ${patient.name || 'this patient'} and their prescription? This cannot be undone.`)) {
+          return;
+        }
+        window.VOICECARE_STORAGE.deletePatient(id);
+        renderPatientScreen();
+        renderHomeStats();
+        showToast('Patient record deleted.');
+      }
+    });
+
+    $('btn-rx-photos')?.addEventListener('click', () => $('rx-photos-input')?.click());
+    $('btn-rx-camera')?.addEventListener('click', () => $('rx-camera-input')?.click());
+    $('btn-rx-document')?.addEventListener('click', () => $('rx-document-input')?.click());
+    ['rx-photos-input', 'rx-camera-input', 'rx-document-input'].forEach((id) => {
+      $(id)?.addEventListener('change', async (event) => {
+        const input = event.target;
+        await addPrescriptionFiles(input.files);
+        input.value = '';
+      });
+    });
+    $('rx-list')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-rx-remove]');
+      if (!btn) return;
+      state.pendingRx = state.pendingRx.filter(
+        (file) => file.id !== btn.getAttribute('data-rx-remove')
+      );
+      renderPendingPrescriptions();
     });
 
     // 5d. Original words vs AI summary
@@ -1716,18 +1868,6 @@
     $('btn-go-pdf').addEventListener('click', () => {
       renderPdfPreview();
       navigate('pdf');
-      window.VOICECARE_SHARE?.showForEntry?.(state.currentEntry);
-    });
-
-    // 7b. QR share (doctor opens it in a browser, no login)
-    $('btn-copy-share-link')?.addEventListener('click', () => window.VOICECARE_SHARE?.copyLink?.());
-    $('btn-share-link')?.addEventListener('click', async () => {
-      if (!state.currentEntry) return;
-      try {
-        await window.VOICECARE_SHARE.nativeShare(state.currentEntry);
-      } catch (err) {
-        showToast(err.message || 'Could not share the link.');
-      }
     });
 
     // 8. Edit Summary Screen
@@ -1769,6 +1909,7 @@
       state.currentEntry = {
         ...state.currentEntry,
         summary: updatedSummary,
+        englishSummary: updatedSummary,
         confirmed: $('edit-confirm-checkbox').checked,
         synced: false,
         updatedAt: new Date().toISOString()

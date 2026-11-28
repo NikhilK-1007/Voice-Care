@@ -1699,7 +1699,7 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   .record-card { break-inside: avoid; box-shadow: none; }
 }
 
-/* ---------- Phase 1: quick-info card, follow-up questions, urgency, QR ---------- */
+/* ---------- Phase 1: patient card, urgency, prescriptions ---------- */
 
 .quickinfo-strip {
   display: flex;
@@ -1822,32 +1822,6 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   font-size: 0.8rem;
 }
 
-.qr-panel {
-  text-align: center;
-}
-
-.qr-canvas {
-  width: 220px;
-  height: 220px;
-  max-width: 78vw;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 8px;
-  margin: 4px auto 10px;
-  display: block;
-  image-rendering: pixelated;
-}
-
-.share-link {
-  margin: 0 0 6px;
-  font-size: 0.8rem;
-  color: #0f766e;
-  word-break: break-all;
-}
-
 .section-meta {
   margin: 0 0 10px;
   font-size: 0.78rem;
@@ -1957,3 +1931,86 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
 @media (min-width: 480px) {
   .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------- Patient records & prescriptions ---------- */
+.patient-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.patient-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+.patient-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.patient-name {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.patient-meta {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.patient-card .item-actions {
+  margin-top: 12px;
+}
+.rx-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.rx-list .photo-item { position: relative; }
+.rx-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-sunk);
+}
+.rx-doc-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.rx-doc-name {
+  flex: 1;
+  font-size: 0.84rem;
+  color: var(--ink-2);
+  word-break: break-word;
+}
+.photo-remove-inline {
+  position: static;
+  flex: 0 0 auto;
+}
+.possible-panel {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed #b45309;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+.possible-panel .summary-lang-label { color: #92400e; }
+.possible-panel .panel-sub { color: #78350f; }

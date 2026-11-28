@@ -337,14 +337,14 @@
         </div>
 
         <div class="hero-card">
-          <p class="hero-kicker">Your voice, your health</p>
-          <h3 class="hero-title">Describe your health concern</h3>
+          <p class="hero-kicker">Clinical intake, in seconds</p>
+          <h3 class="hero-title">Record the patient's complaint</h3>
           <p class="hero-sub" id="home-subtitle">
-            Speak in English, हिन्दी or ಕನ್ನಡ. We'll prepare a summary for your doctor.
+            Type or dictate what the patient says in any language. VoiceCare writes an English summary and suggests symptoms to ask about.
           </p>
           <button id="btn-home-describe" class="btn btn-gold" type="button">
             <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg>
-            Start speaking
+            New consultation
           </button>
         </div>
 
@@ -366,8 +366,8 @@
               <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg>
             </span>
             <span>
-              <span class="quick-tile-title">Quick-Info Card</span>
-              <span class="quick-tile-meta" id="home-profile-summary">Add name, age, blood group</span>
+              <span class="quick-tile-title">Patients</span>
+              <span class="quick-tile-meta" id="home-profile-summary">Add a patient record</span>
             </span>
           </button>
 
@@ -415,16 +415,16 @@
         <div class="disclaimer-banner">
           <svg class="icon icon-sm" aria-hidden="true"><use href="#i-info"></use></svg>
           <span>
-            <strong>VoiceCare does not diagnose.</strong> It only organises what you say so your doctor can understand you better.
+            <strong>VoiceCare does not diagnose.</strong> It records the complaint in English and flags possible symptoms for you to confirm.
           </span>
         </div>
 
         <section class="panel panel-tint" style="margin-top: 12px;">
-          <p class="section-label" style="margin-top: 0;">Before your appointment</p>
+          <p class="section-label" style="margin-top: 0;">During the consultation</p>
           <ul class="checklist">
-            <li>Keep your medicine strips or prescription photo handy.</li>
-            <li>Note when symptoms started and whether they feel mild or severe.</li>
-            <li>Mention long-term conditions such as sugar (diabetes) or BP.</li>
+            <li>Record the complaint in the patient's own words and language.</li>
+            <li>Check the suggested symptoms and confirm which ones apply.</li>
+            <li>Attach the prescription photo or document to the patient record.</li>
           </ul>
         </section>
       </section>
@@ -481,9 +481,9 @@
       <!-- 5 · HEALTH INPUT (PDF Page 1) -->
       <section id="screen-input" class="screen" aria-label="Describe health concern">
         <div class="page-head">
-          <h2 class="page-title">How are you feeling?</h2>
+          <h2 class="page-title">What is the patient saying?</h2>
           <p class="page-sub" id="input-page-sub">
-            Tap the microphone and speak in any language.
+            Tap the microphone and record the complaint in any language.
           </p>
         </div>
 
@@ -501,7 +501,7 @@
           <p class="voice-status" id="voice-status" role="status" aria-live="polite"></p>
           <p class="voice-privacy-note" id="voice-sub">
             <svg class="icon icon-sm" aria-hidden="true"><use href="#i-lock"></use></svg>
-            Your voice stays private and is never stored on disk.
+            The recording stays private and is never stored on disk.
           </p>
         </section>
 
@@ -522,11 +522,11 @@
           enterkeyhint="done"
           autocapitalize="sentences"
           spellcheck="true"
-          placeholder="Example: I have had fever and headache since 3 days…"
+          placeholder="Example: Patient has had fever and headache for 3 days…"
         ></textarea>
 
         <div class="meta-row">
-          <span id="input-lang-note">You can type or edit in English, हिन्दी or ಕನ್ನಡ.</span>
+          <span id="input-lang-note">Type or edit in English, हिन्दी or ಕನ್ನಡ.</span>
           <span id="input-char-count">0 characters</span>
         </div>
         <span id="input-lang-indicator" class="hidden">English</span>
@@ -545,43 +545,19 @@
       <section id="screen-processing" class="screen" aria-label="Preparing summary">
         <div class="processing">
           <div class="spinner" aria-hidden="true"></div>
-          <h2 class="processing-title" id="processing-title">Organising your health summary…</h2>
+          <h2 class="processing-title" id="processing-title">Preparing the clinical summary…</h2>
           <p class="processing-sub" id="processing-subtitle">
-            VoiceCare is structuring your words for your doctor without changing their meaning.
+            VoiceCare is structuring the complaint in English without changing its meaning.
           </p>
 
           <ol class="progress-list">
-            <li class="step is-active" id="proc-step-1">Reading your description safely</li>
+            <li class="step is-active" id="proc-step-1">Reading the complaint safely</li>
             <li class="step" id="proc-step-2">Organising symptoms, duration and medicines</li>
-            <li class="step" id="proc-step-3">Preparing questions for your doctor</li>
+            <li class="step" id="proc-step-3">Suggesting symptoms to ask about</li>
           </ol>
 
           <button id="btn-cancel-processing" class="btn btn-quiet" type="button">Cancel</button>
         </div>
-      </section>
-
-      <!-- 6b · AI FOLLOW-UP QUESTIONS -->
-      <section id="screen-followup" class="screen" aria-label="Follow-up questions">
-        <div class="page-head">
-          <p class="eyebrow">Before your summary</p>
-          <h2 class="page-title">A few quick questions</h2>
-          <p class="page-sub">
-            Your doctor will want these details. Answer any of them, or skip all of them — your summary is made from what you already said.
-          </p>
-        </div>
-
-        <div id="followup-list" class="stack"></div>
-
-        <p id="followup-status" class="voice-status" role="status" aria-live="polite"></p>
-
-        <button id="btn-followup-continue" class="btn btn-gold" type="button">
-          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-sparkles"></use></svg>
-          Create my summary
-        </button>
-        <button id="btn-followup-skip" class="btn btn-quiet" type="button">
-          Skip all questions
-        </button>
-        <p class="footnote">VoiceCare never answers these for you. Empty answers stay empty.</p>
       </section>
 
       <!-- 7 · SUMMARY (PDF Page 2) -->
@@ -604,14 +580,14 @@
         </div>
 
         <div class="summary-header-row">
-          <h2 class="page-title">Doctor summary</h2>
+          <h2 class="page-title">Consultation summary</h2>
           <span class="pill-teal" id="summary-lang-badge">English</span>
         </div>
 
         <div class="disclaimer-banner">
           <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"></use></svg>
           <span id="summary-disclaimer-text">
-            <strong>Not a diagnosis.</strong> This summary is generated from your words to help your doctor. It is not medical advice.
+            <strong>Not a diagnosis.</strong> Generated from the recorded complaint as a communication aid. Not medical advice.
           </span>
         </div>
 
@@ -640,31 +616,35 @@
             aria-selected="false"
             type="button"
           >
-            My exact words
+            Patient's words
           </button>
         </div>
 
         <div id="summary-ai-pane" class="summary-dual">
-          <div class="summary-lang-block" id="summary-native-block">
-            <p class="summary-lang-label" id="summary-native-label">Your language</p>
-            <div id="summary-sections-container"></div>
-          </div>
           <div class="summary-lang-block summary-lang-english">
-            <p class="summary-lang-label">English version</p>
+            <p class="summary-lang-label">Summary for the doctor · English</p>
             <div id="summary-english-container"></div>
+            <div id="summary-possible-panel" class="possible-panel hidden">
+              <p class="summary-lang-label">Possible symptoms to mention</p>
+              <p class="panel-sub">
+                AI suggestions that often accompany this complaint. Not the patient's words —
+                confirm with the patient which ones apply.
+              </p>
+              <ul id="summary-possible-list" class="record-list"></ul>
+            </div>
           </div>
         </div>
 
         <div id="summary-original-pane" class="hidden">
           <section class="panel">
-            <p class="section-label" style="margin-top: 0;">What you said, word for word</p>
+            <p class="section-label" style="margin-top: 0;">What the patient said, word for word</p>
             <p id="summary-original-text" class="original-text"></p>
           </section>
           <section id="summary-answers-panel" class="panel panel-tint hidden">
             <p class="section-label" style="margin-top: 0;">Your answers to the follow-up questions</p>
             <ul id="summary-answers-list" class="record-list"></ul>
           </section>
-          <p class="footnote">Nothing here is edited. Your doctor sees your own words beside the AI summary.</p>
+          <p class="footnote">Nothing here is edited. The exact words are kept beside the AI summary for reference.</p>
         </div>
 
         <div class="stack" style="margin-top: 16px;">
@@ -757,7 +737,7 @@
       <!-- 9 · REPORT -->
       <section id="screen-pdf" class="screen" aria-label="Report preview">
         <div class="page-head no-print">
-          <p class="eyebrow">Ready for consultation</p>
+          <p class="eyebrow">Ready for the record</p>
           <h2 class="page-title">PDF report &amp; share</h2>
         </div>
 
@@ -776,28 +756,11 @@
             <p class="sheet-meta" id="pdf-meta-line"></p>
           </header>
           <div id="pdf-preview-body"></div>
-          <footer class="sheet-foot">
-            Prepared by the patient with VoiceCare AI as a communication aid. Not a medical
-            diagnosis, prescription or verified medical record.
+                      <footer class="sheet-foot">
+            Prepared with VoiceCare AI from the recorded complaint as a communication aid. Not a
+            medical diagnosis, prescription or verified medical record.
           </footer>
         </article>
-
-        <section id="share-qr-wrap" class="panel qr-panel hidden">
-          <div class="panel-head">
-            <h3 class="panel-title">QR code for your doctor</h3>
-            <p class="panel-sub">
-              Your doctor scans this with any phone camera and reads the summary in the browser. No login, no app install.
-            </p>
-          </div>
-          <canvas id="share-qr-canvas" class="qr-canvas" width="240" height="240" aria-label="QR code linking to your summary"></canvas>
-          <p id="share-link-text" class="share-link"></p>
-          <p id="share-expiry-text" class="section-meta"></p>
-          <div class="btn-row">
-            <button id="btn-copy-share-link" class="btn btn-secondary btn-sm" type="button">Copy link</button>
-            <button id="btn-share-link" class="btn btn-secondary btn-sm" type="button">Send link</button>
-          </div>
-          <p id="share-status" class="voice-status" role="status" aria-live="polite"></p>
-        </section>
 
         <div class="stack no-print">
           <button id="btn-download-pdf" class="btn btn-primary" type="button">
@@ -817,74 +780,110 @@
         </div>
       </section>
 
-      <!-- 10 · QUICK-INFO CARD (replaces medicine reminders) -->
-      <section id="screen-profile" class="screen" aria-label="My information">
+      <!-- 10 · PATIENTS -->
+      <section id="screen-profile" class="screen" aria-label="Patients">
         <div class="page-head">
-          <p class="eyebrow">Fill once</p>
-          <h2 class="page-title">My information</h2>
+          <p class="eyebrow">Patient records</p>
+          <h2 class="page-title">Patients</h2>
           <p class="page-sub">
-            Your doctor sees this at the top of every summary and PDF, so you never repeat it at the clinic.
+            Add each patient once, with their details and prescription. The active patient is attached to every summary and PDF.
           </p>
         </div>
 
-        <form id="profile-form" class="stack" novalidate>
-          <section class="panel stack">
-            <div class="field">
-              <label class="field-label" for="profile-name">Full name</label>
-              <input id="profile-name" class="input" type="text" maxlength="80" placeholder="e.g. Lakshmi Devi" autocomplete="name" />
-            </div>
-            <div class="field-grid">
-              <div class="field">
-                <label class="field-label" for="profile-age">Age</label>
-                <input id="profile-age" class="input" type="number" min="0" max="120" inputmode="numeric" placeholder="e.g. 54" />
+        <div id="patient-list" class="stack"></div>
+
+        <p id="patient-empty" class="empty-state">
+          No patients yet. Tap Add patient to create the first record.
+        </p>
+
+        <button id="btn-add-patient" class="btn btn-primary" type="button">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+          Add patient
+        </button>
+
+        <div id="profile-form-wrap" class="hidden" style="margin-top: 16px;">
+          <form id="profile-form" class="stack" novalidate>
+            <section class="panel stack">
+              <div class="panel-head">
+                <h3 class="panel-title" id="patient-form-title">New patient</h3>
+                <p class="panel-sub">These details appear at the top of every summary and PDF for this patient.</p>
               </div>
               <div class="field">
-                <label class="field-label" for="profile-gender">Gender</label>
-                <select id="profile-gender" class="select">
-                  <option value="">Not stated</option>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other</option>
+                <label class="field-label" for="profile-name">Full name</label>
+                <input id="profile-name" class="input" type="text" maxlength="80" placeholder="e.g. Lakshmi Devi" autocomplete="off" />
+              </div>
+              <div class="field-grid">
+                <div class="field">
+                  <label class="field-label" for="profile-age">Age</label>
+                  <input id="profile-age" class="input" type="number" min="0" max="120" inputmode="numeric" placeholder="e.g. 54" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="profile-gender">Gender</label>
+                  <select id="profile-gender" class="select">
+                    <option value="">Not stated</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="profile-blood">Blood group</label>
+                <select id="profile-blood" class="select">
+                  <option value="">Not known</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
                 </select>
               </div>
-            </div>
-            <div class="field">
-              <label class="field-label" for="profile-blood">Blood group</label>
-              <select id="profile-blood" class="select">
-                <option value="">Not known</option>
-                <option value="A+">A+</option>
-                <option value="A-">A-</option>
-                <option value="B+">B+</option>
-                <option value="B-">B-</option>
-                <option value="AB+">AB+</option>
-                <option value="AB-">AB-</option>
-                <option value="O+">O+</option>
-                <option value="O-">O-</option>
-              </select>
-            </div>
-            <div class="field">
-              <label class="field-label" for="profile-allergies">Allergies <span class="optional">optional</span></label>
-              <textarea id="profile-allergies" class="textarea" rows="2" maxlength="200" placeholder="e.g. Penicillin, peanuts. Write None if you have no allergies."></textarea>
-              <p class="panel-sub">Write it exactly as your doctor told you. VoiceCare never adds an allergy.</p>
-            </div>
-            <div class="field">
-              <label class="field-label" for="profile-emergency">Emergency contact <span class="optional">optional</span></label>
-              <input id="profile-emergency" class="input" type="tel" maxlength="20" inputmode="tel" placeholder="Family member's phone number" />
-            </div>
-          </section>
+              <div class="field">
+                <label class="field-label" for="profile-allergies">Allergies <span class="optional">optional</span></label>
+                <textarea id="profile-allergies" class="textarea" rows="2" maxlength="200" placeholder="e.g. Penicillin, peanuts. Write None if none known."></textarea>
+                <p class="panel-sub">Recorded exactly as entered. VoiceCare never adds an allergy.</p>
+              </div>
+              <div class="field">
+                <label class="field-label" for="profile-emergency">Emergency contact <span class="optional">optional</span></label>
+                <input id="profile-emergency" class="input" type="tel" maxlength="20" inputmode="tel" placeholder="Family member's phone number" />
+              </div>
+            </section>
 
-          <button class="btn btn-primary" type="submit">Save my information</button>
-        </form>
+            <section class="panel stack">
+              <div class="panel-head">
+                <h3 class="panel-title">Prescription</h3>
+                <p class="panel-sub">Attach the prescription from photos, the camera or a document. Up to 6 files, stored on this phone.</p>
+              </div>
+              <div class="btn-row">
+                <button id="btn-rx-photos" class="btn btn-secondary btn-sm" type="button">Photos</button>
+                <button id="btn-rx-camera" class="btn btn-secondary btn-sm" type="button">Camera</button>
+                <button id="btn-rx-document" class="btn btn-secondary btn-sm" type="button">Document</button>
+              </div>
+              <input id="rx-photos-input" class="hidden" type="file" accept="image/*" multiple />
+              <input id="rx-camera-input" class="hidden" type="file" accept="image/*" capture="environment" />
+              <input id="rx-document-input" class="hidden" type="file" accept="application/pdf,image/*" />
+              <div id="rx-list" class="rx-list"></div>
+            </section>
+
+            <div class="btn-row">
+              <button class="btn btn-primary" type="submit">Save information</button>
+              <button id="btn-cancel-patient" class="btn btn-quiet" type="button">Cancel</button>
+            </div>
+          </form>
+        </div>
 
         <p class="footnote">
-          Saved only on this phone. It is added to your summaries and PDFs, and to a QR link only when you choose to share one.
+          Stored only on this phone. Prescriptions are never uploaded to the cloud.
         </p>
       </section>
 
       <section id="screen-history" class="screen" aria-label="Saved summaries">
         <div class="page-head">
-          <h2 class="page-title">History</h2>
-          <p class="page-sub">Reopen, edit or share a previous visit.</p>
+                      <h2 class="page-title">History</h2>
+          <p class="page-sub">Reopen, edit or share a previous consultation.</p>
         </div>
 
         <div class="search">
@@ -899,10 +898,10 @@
       <!-- 13 · DOCTOR VIEW -->
       <section id="screen-doctor" class="screen" aria-label="Doctor view">
         <div class="page-head">
-          <p class="eyebrow">Hand your phone to the doctor</p>
+          <p class="eyebrow">Consultation list</p>
           <h2 class="page-title">Doctor view</h2>
           <p class="page-sub">
-            Every visit in one place, newest first. Mark a visit as reviewed after the consultation.
+            Every consultation in one place, newest first. Mark a visit as reviewed after you finish.
           </p>
         </div>
 
@@ -1061,7 +1060,7 @@
         <section id="privacy-details-card" class="panel hidden">
           <p class="section-label" style="margin-top: 0;">How VoiceCare protects you</p>
           <p class="body-text">
-            <strong>VoiceCare listens inside the app.</strong> Tap the mic, speak in your own language, and our secure server writes it down over HTTPS without saving audio to disk. Gemini AI organises it into an 8-section summary in English.
+            <strong>VoiceCare records inside the app.</strong> Tap the mic, record the patient in any language, and our secure server writes it down over HTTPS without saving audio to disk. Gemini AI organises it into an English summary and separate symptom suggestions.
           </p>
           <ul class="checklist">
             <li>Never diagnoses illness or prescribes medicine.</li>
@@ -1086,7 +1085,7 @@
       </button>
       <button class="tab" data-screen="profile" type="button">
         <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg></span>
-        <span id="nav-label-profile">My info</span>
+                  <span id="nav-label-profile">Patients</span>
       </button>
       <button class="tab" data-screen="history" type="button">
         <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg></span>
@@ -1103,7 +1102,6 @@
 
   <!-- Scripts -->
   <script src="vendor/jspdf.umd.min.js"></script>
-  <script src="vendor/qrcode.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/storage.js"></script>
@@ -1111,7 +1109,6 @@
   <script src="js/api.js"></script>
   <script src="js/voice.js"></script>
   <script src="js/pdf.js"></script>
-  <script src="js/share.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

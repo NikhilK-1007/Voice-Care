@@ -13,6 +13,9 @@ const KEYS = {
   PROFILE: 'voicecare_quick_info',
   DELETED: 'voicecare_deleted_ids',
   PHOTOS: 'voicecare_photos',
+  PATIENTS: 'voicecare_patients',
+  ACTIVE_PATIENT: 'voicecare_active_patient',
+  PRESCRIPTIONS: 'voicecare_prescriptions',
   DRAFT_TEXT: 'voicecare_draft_text',
   ONBOARDED: 'voicecare_onboarded'
 };
@@ -180,12 +183,144 @@ window.VOICECARE_STORAGE = {
   },
 
   /**
-   * The quick-info card. Stored once and attached to every summary and PDF, so
-   * a doctor always sees the same name, age, blood group and allergy warning.
+   * Patient records, added one by one by the doctor. The first patient is
+   * migrated from the old single quick-info card so no data is lost.
+   * @returns {Array<{id: string, name: string, age: string, gender: string, bloodGroup: string, allergies: string, emergencyContact: string}>}
+   */
+  getPatients() {
+    const list = safeRead(scopedKey(KEYS.PATIENTS), []);
+    if (Array.isArray(list) && list.length) {
+      return list.filter((item) => item && item.id);
+    }
+
+    const legacy = safeRead(scopedKey(KEYS.PROFILE), null);
+    if (
+      legacy &&
+      (legacy.name || legacy.age || legacy.bloodGroup || legacy.allergies || legacy.emergencyContact)
+    ) {
+      const now = new Date().toISOString();
+      const migrated = {
+        id: `pat_${Date.now()}`,
+        name: String(legacy.name || '').trim().slice(0, 80),
+        age: String(legacy.age || '').trim().slice(0, 3),
+        gender: String(legacy.gender || '').trim().slice(0, 20),
+        bloodGroup: String(legacy.bloodGroup || '').trim().slice(0, 8),
+        allergies: String(legacy.allergies || '').trim().slice(0, 200),
+        emergencyContact: String(legacy.emergencyContact || '').trim().slice(0, 20),
+        createdAt: legacy.createdAt || now,
+        updatedAt: legacy.updatedAt || now
+      };
+      safeWrite(scopedKey(KEYS.PATIENTS), [migrated]);
+      localStorage.setItem(scopedKey(KEYS.ACTIVE_PATIENT), migrated.id);
+      return [migrated];
+    }
+    return [];
+  },
+
+  getActivePatient() {
+    const list = window.VOICECARE_STORAGE.getPatients();
+    const id = localStorage.getItem(scopedKey(KEYS.ACTIVE_PATIENT));
+    return list.find((item) => item.id === id) || list[0] || null;
+  },
+
+  getActivePatientId() {
+    return window.VOICECARE_STORAGE.getActivePatient()?.id || null;
+  },
+
+  setActivePatient(id) {
+    if (!id) return;
+    localStorage.setItem(scopedKey(KEYS.ACTIVE_PATIENT), id);
+  },
+
+  /**
+   * Creates or updates one patient record. Passing no id creates a new record.
+   * The active patient doubles as the legacy profile so PDFs and cloud sync keep
+   * working without changes.
+   */
+  savePatient(patient = {}) {
+    const list = window.VOICECARE_STORAGE.getPatients();
+    const existing = patient.id ? list.find((item) => item.id === patient.id) : null;
+    const now = new Date().toISOString();
+    const clean = {
+      id: existing?.id || `pat_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      name: String(patient.name || '').trim().slice(0, 80),
+      age: String(patient.age || '').trim().slice(0, 3),
+      gender: String(patient.gender || '').trim().slice(0, 20),
+      bloodGroup: String(patient.bloodGroup || '').trim().slice(0, 8),
+      allergies: String(patient.allergies || '').trim().slice(0, 200),
+      emergencyContact: String(patient.emergencyContact || '').trim().slice(0, 20),
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    };
+
+    const next = existing
+      ? list.map((item) => (item.id === clean.id ? clean : item))
+      : [...list, clean];
+    safeWrite(scopedKey(KEYS.PATIENTS), next);
+
+    if (!window.VOICECARE_STORAGE.getActivePatientId()) {
+      localStorage.setItem(scopedKey(KEYS.ACTIVE_PATIENT), clean.id);
+    }
+    // Keep the plain profile key in step for older code and cloud metadata.
+    const activeId = localStorage.getItem(scopedKey(KEYS.ACTIVE_PATIENT));
+    if (!activeId || activeId === clean.id) {
+      safeWrite(scopedKey(KEYS.PROFILE), clean);
+    }
+    return clean;
+  },
+
+  deletePatient(id) {
+    const list = window.VOICECARE_STORAGE.getPatients().filter((item) => item.id !== id);
+    safeWrite(scopedKey(KEYS.PATIENTS), list);
+
+    const rxMap = safeRead(scopedKey(KEYS.PRESCRIPTIONS), {}) || {};
+    if (rxMap[id]) {
+      delete rxMap[id];
+      safeWrite(scopedKey(KEYS.PRESCRIPTIONS), rxMap);
+    }
+
+    if (localStorage.getItem(scopedKey(KEYS.ACTIVE_PATIENT)) === id) {
+      if (list[0]) {
+        localStorage.setItem(scopedKey(KEYS.ACTIVE_PATIENT), list[0].id);
+        safeWrite(scopedKey(KEYS.PROFILE), list[0]);
+      } else {
+        localStorage.removeItem(scopedKey(KEYS.ACTIVE_PATIENT));
+        localStorage.removeItem(scopedKey(KEYS.PROFILE));
+      }
+    }
+    return list;
+  },
+
+  /**
+   * Prescription files (photos or a PDF) attached to one patient.
+   * @returns {Array<{id: string, kind: 'image'|'document', name: string, dataUrl: string, addedAt: string}>}
+   */
+  getPrescriptions(patientId) {
+    if (!patientId) return [];
+    const map = safeRead(scopedKey(KEYS.PRESCRIPTIONS), {}) || {};
+    const list = map[patientId];
+    return Array.isArray(list) ? list.filter((item) => item && item.dataUrl) : [];
+  },
+
+  savePrescriptions(patientId, files) {
+    if (!patientId) return [];
+    const map = safeRead(scopedKey(KEYS.PRESCRIPTIONS), {}) || {};
+    const list = (Array.isArray(files) ? files : [])
+      .filter((item) => item && typeof item.dataUrl === 'string')
+      .slice(0, 6);
+    if (list.length) map[patientId] = list;
+    else delete map[patientId];
+    safeWrite(scopedKey(KEYS.PRESCRIPTIONS), map);
+    return list;
+  },
+
+  /**
+   * The active patient's details, in the shape PDFs, summaries and cloud sync
+   * already expect.
    * @returns {{ name: string, age: string, gender: string, bloodGroup: string, allergies: string, emergencyContact: string }}
    */
   getProfile() {
-    const raw = safeRead(scopedKey(KEYS.PROFILE), null) || {};
+    const raw = window.VOICECARE_STORAGE.getActivePatient() || safeRead(scopedKey(KEYS.PROFILE), null) || {};
     return {
       name: typeof raw.name === 'string' ? raw.name : '',
       age: typeof raw.age === 'string' ? raw.age : '',
@@ -201,19 +336,8 @@ window.VOICECARE_STORAGE = {
     return Boolean(profile.name || profile.age || profile.bloodGroup || profile.allergies);
   },
   saveProfile(profile) {
-    const existing = safeRead(scopedKey(KEYS.PROFILE), null);
-    const clean = {
-      name: String(profile?.name || '').trim().slice(0, 80),
-      age: String(profile?.age || '').trim().slice(0, 3),
-      gender: String(profile?.gender || '').trim().slice(0, 20),
-      bloodGroup: String(profile?.bloodGroup || '').trim().slice(0, 8),
-      allergies: String(profile?.allergies || '').trim().slice(0, 200),
-      emergencyContact: String(profile?.emergencyContact || '').trim().slice(0, 20),
-      createdAt: existing?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    safeWrite(scopedKey(KEYS.PROFILE), clean);
-    return clean;
+    const active = window.VOICECARE_STORAGE.getActivePatient();
+    return window.VOICECARE_STORAGE.savePatient({ ...profile, id: active?.id });
   },
 
   /**

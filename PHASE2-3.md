@@ -72,15 +72,16 @@ language and whether urgent words were present. Tapping a visit reopens its summ
 
 ## Demo script (5 minutes)
 
-1. **Home** → tap **Quick-Info Card** → fill name, age, blood group, allergy → **Save**.
-   Point out the toast: the details now appear on every summary and PDF.
-2. Tap **Speak** → tap the **sample** chip, or type in Hindi/Kannada.
-   → **Generate summary** → answer one follow-up question → **Continue**.
-3. On the summary: the **English version** is shown *first* when the input was not English;
-   toggle **My exact words** to show what the patient actually said.
+1. **Home** → **Patients** → **Add patient** → fill name, age, blood group, allergy →
+   attach a prescription with **Photos / Camera / Document** → **Save information**.
+   The saved patient card replaces the form and becomes the active patient.
+2. Tap **Record** → tap the **sample** chip, or type in Hindi/Kannada.
+   → **Generate Summary**.
+3. On the summary: one English summary, plus an amber **Possible symptoms to mention** panel
+   (AI suggestions, not the patient's words). Toggle **Patient's words** for the exact wording.
 4. Urgent words (e.g. “सीने में दर्द”) appear in the red banner with
    “If this is an emergency, call 108.”
-5. **Share PDF** → QR code, Download PDF, Copy text.
+5. **Share PDF** → Download PDF, Share, Copy text. There is no QR code.
 6. Back to **Home** → **Doctor view** → show the card → **Mark reviewed** →
    **Visit notes** → type what the doctor said, add a prescription photo → **Save**.
 7. **Timeline** → the same visit appears under this month with a filled dot.

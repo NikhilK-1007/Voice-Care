@@ -8,7 +8,6 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const summaryRoutes = require('./routes/summary');
 const transcribeRoutes = require('./routes/transcribe');
 const followUpRoutes = require('./routes/followup');
-const { router: shareRoutes, sharePageHandler } = require('./routes/share');
 const { getModelChain } = require('./services/geminiService');
 
 const app = express();
@@ -128,10 +127,6 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', summaryRoutes);
 app.use('/api', transcribeRoutes);
 app.use('/api', followUpRoutes);
-app.use('/api', shareRoutes);
-
-// Doctor-facing read-only share page (no login, opened from a QR code)
-app.get('/s/:token', sharePageHandler);
 
 // Serve only the public mobile web frontend (deny dotfiles like .env)
 const frontendDir = path.join(__dirname, '..', 'frontend', 'www');

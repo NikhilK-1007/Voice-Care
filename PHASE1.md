@@ -17,14 +17,11 @@ Phase 2 is intentionally not started; it waits for your confirmation.
    when the phrase (or all its meaningful words) literally appears in the patient's text.
    Shown in a red banner with the line **"If this is an emergency, call 108."** No severity,
    no diagnosis.
-5. **Doctor-language output** — the eight sections are written in the patient's own language
-   and script, plus `englishSummary` in English. Screen shows both; the PDF prints both
-   columns side by side (native script is rendered via canvas, because jsPDF cannot draw
-   Devanagari/Kannada).
-6. **QR share** — `POST /api/share` creates a 144-bit token, valid 24 h. `GET /s/:token` is a
-   script-free, read-only page (patient info, urgency words, both languages, original words,
-   disclaimer) that opens in any phone browser with no login. QR is drawn in-app and also
-   printed in the PDF.
+5. **Doctor-facing English only** — the app records the complaint in any language and always
+   shows one English summary. AI **possible symptoms** are listed separately as suggestions
+   for the doctor to confirm; the patient's exact words stay one tap away for reference.
+6. **Share PDF** — the summary is exported as a PDF / plain text through the system share
+   sheet. The QR code and the read-only doctor web page were removed on request.
 
 Removed: the whole Medicine Reminder feature (screen, nav tab, form, notifications,
 cloud reminder sync, storage helpers). `js/notifications.js` is deleted.
@@ -43,29 +40,26 @@ cloud reminder sync, storage helpers). `js/notifications.js` is deleted.
 
 | # | Feature | Steps | Expected |
 |---|---|---|---|
-| 1 | Quick-Info | My info → fill all six fields → Save | Toast confirms; Home tile shows "Name · age · Blood group …" |
-| 2 | Quick-Info on summary | Make any summary | Blue strip with the same line above the summary |
-| 3 | Follow-up questions | Speak page → "I have fever." → Generate | Screen "A few quick questions", max 3, each with Speak/Skip |
-| 4 | Skip answers | Same screen → Skip all questions | Summary is created, "My exact words" shows no answers |
-| 5 | Answers used | Answer one question → Create my summary | Answers appear under "My exact words" and in the PDF |
-| 6 | Original toggle | Summary → "My exact words" | Unedited description, nothing rewritten |
-| 7 | Urgency flag | Describe "chest pain" → Generate | Red banner lists "chest pain" + "If this is an emergency, call 108." |
-| 8 | No invented flags | Describe "fever for 2 days" | Banner stays hidden |
-| 9 | Dual language | Set language हिन्दी, describe in Hindi | Left column Hindi, right column English |
-| 10 | PDF | Share PDF → Download PDF | Two columns, patient info box, urgent box, original words |
-| 11 | QR | Share PDF screen | QR + 24-hour link appear within ~2 s |
-| 12 | Doctor page | Scan QR / open link on another device | Read-only page, no login, no app; unknown token → 404 |
-| 13 | Expiry | Wait 24 h (or edit `expiresAt` in `backend/.data/shares.json`) | Page says link expired (410) |
-| 14 | Reminders gone | Bottom nav / Home | No Medicines tab, no reminder tile |
+| 1 | Patients | Patients → Add patient → fill name/age/blood group → Save information | The saved card replaces the form; Home tile shows the active patient |
+| 2 | Multiple patients | Add a second patient → Use | Both records listed; the chosen one is marked Active |
+| 3 | Prescription | Edit a patient → Photos / Camera / Document → choose a file → Save | Thumbnail (or PDF chip) stays on the patient card |
+| 4 | Possible symptoms | Record "Patient has fever for 2 days" → Generate | Amber panel lists common companion symptoms, marked as AI suggestions |
+| 5 | No suggestions | Record a non-medical sentence | The suggestions panel stays hidden |
+| 6 | Patient words | Summary → "Patient's words" | The unedited complaint, nothing rewritten |
+| 7 | Urgency flag | Record "chest pain" → Generate | Red banner lists "chest pain" + "If this is an emergency, call 108." |
+| 8 | No invented flags | Record "fever for 2 days" | Banner stays hidden |
+| 9 | English only | Record in Hindi or Kannada | One English summary; no second-language block anywhere |
+| 10 | PDF | Share PDF → Download PDF | English sections, patient box, urgent box, AI suggestions in a separate block |
+| 11 | No QR | Share PDF screen | No QR panel, no link, no expiry text |
+| 12 | Removed share page | Open `/api/share` | 404 — the endpoint and `/s/:token` page no longer exist |
+| 13 | Reminders gone | Bottom nav / Home | No Medicines tab, no reminder tile |
 
-Automated: `cd backend && npm.cmd test` → 7 passing.
+Automated: `cd backend && npm.cmd test` → 9 passing.
 
 ## One thing you must do before the phone uses this
 
-The APK still points at `https://voice-care-t4gz.onrender.com`, which runs the **old**
-backend. Push this code (or let Antigravity deploy it) and redeploy on Render, otherwise:
-
-- follow-up questions silently fall back to "no questions",
-- the QR button says **"API endpoint not found."**
+The APK points at `https://voice-care-t4gz.onrender.com`. Render redeploys from `main`, so
+push and let Render redeploy before testing on the phone, otherwise the phone still gets the
+older server behaviour (no possible-symptom suggestions, old English handling).
 
 Locally everything is verified working against `http://127.0.0.1:3000`.

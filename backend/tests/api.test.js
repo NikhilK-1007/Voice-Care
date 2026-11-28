@@ -238,46 +238,35 @@ test('HTTP API /api/health and /api/summarize work end-to-end in demo fallback m
     });
     assert.equal(answeredRes.status, 200);
 
-    // QR share: create, open as a doctor, and reject an unknown token.
-    const shareRes = await fetch(`${baseUrl}/api/share`, {
+    // Possible symptoms: English suggestions, never mixed into the summary.
+    const feverRes = await fetch(`${baseUrl}/api/summarize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        patientText: 'I have chest pain since morning.',
-        languageLabel: 'English',
-        summary: urgentJson.data.summary,
-        englishSummary: urgentJson.data.englishSummary,
-        urgentFlags: urgentJson.data.urgentFlags,
-        missingInfo: urgentJson.data.missingInfo,
-        patient: { name: 'Test Patient', age: '54', bloodGroup: 'B+', allergies: 'Penicillin' }
-      })
+      body: JSON.stringify({ patientText: 'I have fever since yesterday.', language: 'en' })
     });
-    assert.equal(shareRes.status, 200);
-    const shareJson = await shareRes.json();
-    assert.ok(shareJson.data.token, 'share token returned');
-    assert.match(shareJson.data.url, /\/s\//);
-    assert.ok(shareJson.data.expiresAt, 'expiry returned');
+    assert.equal(feverRes.status, 200);
+    const feverJson = await feverRes.json();
+    assert.ok(Array.isArray(feverJson.data.possibleSymptoms), 'possibleSymptoms is an array');
+    assert.ok(feverJson.data.possibleSymptoms.length >= 2, 'fever suggests companion symptoms');
+    assert.ok(feverJson.data.possibleSymptoms.length <= 6, 'at most 6 suggestions');
+    for (const item of feverJson.data.possibleSymptoms) {
+      assert.equal(typeof item, 'string');
+      assert.ok(!/[\u0900-\u0DFF]/.test(item), 'suggestions are English only');
+      assert.ok(
+        !feverJson.data.summary.symptoms.includes(item),
+        'suggestions are not passed off as the patient\'s own symptoms'
+      );
+    }
 
-    const sharePageRes = await fetch(`${baseUrl}/s/${shareJson.data.token}`);
-    assert.equal(sharePageRes.status, 200);
-    assert.match(sharePageRes.headers.get('content-type') || '', /text\/html/);
-    const shareHtml = await sharePageRes.text();
-    assert.ok(shareHtml.includes('Test Patient'));
-    assert.ok(shareHtml.includes('If this is an emergency, call 108.'));
-    assert.ok(!/<script/i.test(shareHtml), 'doctor page runs no scripts');
-
-    const shareApiRes = await fetch(`${baseUrl}/api/share/${shareJson.data.token}`);
-    assert.equal(shareApiRes.status, 200);
-
-    const missingShareRes = await fetch(`${baseUrl}/s/doesnotexist`);
-    assert.equal(missingShareRes.status, 404);
-
-    const emptyShareRes = await fetch(`${baseUrl}/api/share`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: { mainHealthConcern: NOT_MENTIONED }, patientText: '' })
-    });
-    assert.equal(emptyShareRes.status, 400);
+    // The removed QR share feature must stay gone.
+    const shareGoneRes = await fetch(`${baseUrl}/api/share`, { method: 'POST' });
+    assert.equal(shareGoneRes.status, 404);
+    const shareApiGoneRes = await fetch(`${baseUrl}/api/share/anything`);
+    assert.equal(shareApiGoneRes.status, 404);
+    // The old doctor share page is gone; the SPA fallback serves the app.
+    const legacySharePage = await fetch(`${baseUrl}/s/doesnotexist`);
+    const legacyHtml = await legacySharePage.text();
+    assert.ok(!/read-only summary/i.test(legacyHtml), 'no read-only share page is served');
   } finally {
     server.close();
     if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;

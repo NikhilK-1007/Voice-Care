@@ -5,6 +5,23 @@ and the **Doctor view / timeline / visit notes** on a new device.
 
 ---
 
+## 0. If your table already exists (older SQL)
+
+An older, shorter SQL created a `summaries` table with only 11 columns and no DELETE
+policy. **Do not re-run that snippet.** Run `supabase/schema.sql` instead: it keeps every
+existing row, adds the missing columns, replaces the old policies and adds the DELETE policy.
+
+The old snippet was missing:
+
+| Missing | Effect in the app |
+| --- | --- |
+| `english_summary` | English version not backed up (only on the phone) |
+| `urgent_flags`, `missing_info`, `follow_up_answers`, `quick_info` | Doctor view loses urgency words and the patient card after a reinstall |
+| `reviewed_at`, `doctor_note`, `prescribed_medicines`, `next_visit_at` | Review state and visit notes not backed up |
+| DELETE policy | Deleting a visit fails in the cloud, so it reappears on the next sync |
+| `with check` on update | A row could be re-pointed at another user id |
+| index on `(user_id, updated_at desc)` | Slow load as history grows |
+
 ## 1. Open the SQL editor
 
 1. Go to <https://supabase.com/dashboard> and open the VoiceCare project

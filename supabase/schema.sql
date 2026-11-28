@@ -56,6 +56,17 @@ alter table public.summaries add column if not exists next_visit_at        date;
 alter table public.summaries add column if not exists created_at           timestamptz not null default now();
 alter table public.summaries add column if not exists updated_at           timestamptz not null default now();
 
+-- user_id must never be empty: an orphan row is invisible to every user.
+-- Guarded so a leftover orphan row cannot abort the whole script.
+do $$
+begin
+  if not exists (select 1 from public.summaries where user_id is null) then
+    alter table public.summaries alter column user_id set not null;
+  else
+    raise notice 'Some summaries rows have no user_id; user_id stays nullable.';
+  end if;
+end $$;
+
 -- 3. Fast "my visits, newest first" queries.
 create index if not exists summaries_user_updated_idx
   on public.summaries (user_id, updated_at desc);
@@ -63,6 +74,13 @@ create index if not exists summaries_user_updated_idx
 -- 4. Row Level Security: a patient can only ever touch their own rows.
 --    This is what makes the public anon key in the app safe.
 alter table public.summaries enable row level security;
+
+-- Remove the policies created by the older, incomplete SQL, so there is exactly
+-- one policy per command (and DELETE is actually allowed).
+drop policy if exists "Users can insert their own summaries" on public.summaries;
+drop policy if exists "Users can view their own summaries" on public.summaries;
+drop policy if exists "Users can update their own summaries" on public.summaries;
+drop policy if exists "Users can delete their own summaries" on public.summaries;
 
 drop policy if exists "summaries_select_own" on public.summaries;
 create policy "summaries_select_own"
@@ -104,6 +122,21 @@ drop trigger if exists summaries_touch_updated_at on public.summaries;
 create trigger summaries_touch_updated_at
   before update on public.summaries
   for each row execute function public.voicecare_touch_updated_at();
+
+-- =====================================================================
+-- VERIFY (paste in the SQL editor after running the file above):
+--
+--   select column_name, data_type
+--     from information_schema.columns
+--    where table_schema = 'public' and table_name = 'summaries'
+--    order by ordinal_position;
+--
+--   select policyname, cmd from pg_policies where tablename = 'summaries';
+--
+-- Expected: 20 columns including english_summary, urgent_flags, quick_info,
+-- reviewed_at, doctor_note, next_visit_at; and exactly four policies
+-- (select, insert, update, delete) all named summaries_*_own.
+-- =====================================================================
 
 -- =====================================================================
 -- OPTIONAL RESET (only if your old table used a uuid id column and the app

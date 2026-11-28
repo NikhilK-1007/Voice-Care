@@ -1,8 +1,8 @@
 <div align="center">
   <img src="frontend/www/assets/logo.png" alt="VoiceCare Logo" width="96" height="96" />
   <h1>🩺 VoiceCare</h1>
-  <p><strong>AI-Powered Voice-First Healthcare Communication Assistant for Indian Patients</strong></p>
-  <p><em>"Speak naturally. Let AI organise. Help your doctor understand."</em></p>
+  <p><strong>AI-Powered Clinical Intake Assistant for Indian Doctors</strong></p>
+  <p><em>"Record the complaint. Get an English summary and symptoms to ask about."</em></p>
 
   ![Platform](https://img.shields.io/badge/Platform-Android%20(Capacitor)%20%7C%20Web-0F766E)
   ![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-14B8A6)
@@ -19,9 +19,9 @@
 
 ## ✨ Why VoiceCare?
 
-In busy Indian clinics, patients—especially elderly individuals and those uncomfortable typing—often struggle to explain symptoms clearly within a short consultation.
+In busy Indian clinics, a consultation starts with the patient explaining their complaint — often in Kannada, Hindi, or a mix of languages — while the doctor writes notes in English.
 
-**VoiceCare** lets patients speak or type naturally in **Kannada, Hindi, English, or any other Indian language**, then uses **Google Gemini AI** to organise their words into a clean, **8-section doctor-friendly English summary**—without diagnosing, prescribing, or inventing missing information.
+**VoiceCare is a doctor's tool.** The clinician records what the patient says in any language, and VoiceCare turns it into a clean **English 8-section summary**, plus a short list of **possible symptoms to ask about**. It never diagnoses, never prescribes, and never mixes its suggestions into the patient's own words.
 
 ---
 
@@ -29,10 +29,11 @@ In busy Indian clinics, patients—especially elderly individuals and those unco
 
 ```mermaid
 flowchart LR
-    A["📱 Android App - Capacitor<br/>HTML · CSS · JS · MediaRecorder"] -->|"HTTPS Audio / Text"| B["⚙️ Express Backend - Render<br/>Safety Validator · Model Chain"]
-    B -->|"REST API - Key on Server"| C["🧠 Google Gemini AI<br/>Transcribe + 8-Section JSON"]
+    A["📱 Doctor's Android App - Capacitor<br/>HTML · CSS · JS · MediaRecorder"] -->|"HTTPS Audio / Text"| B["⚙️ Express Backend - Render<br/>Safety Validator · Model Chain"]
+    B -->|"REST API - Key on Server"| C["🧠 Google Gemini AI<br/>Transcribe + 8-Section JSON + Suggestions"]
     A -->|"Email / Google OAuth + RLS"| D["🗄️ Supabase<br/>Auth & PostgreSQL Sync"]
     A -->|"Offline"| E["📄 jsPDF + Native Share<br/>Doctor-Ready PDF"]
+    A -->|"On device"| F["🗂️ Patient records & prescriptions<br/>localStorage only"]
 ```
 
 ---
@@ -41,26 +42,33 @@ flowchart LR
 
 | Category | What VoiceCare Delivers |
 | --- | --- |
+| 👩‍⚕️ **Built for doctors** | Intake, summary, patient records and PDFs are all written and laid out for the clinician, not the patient. |
 | 🎙️ **In-App Voice Input** | Built-in `MediaRecorder` (`32 kbps` mono Opus, up to 60s) posts to `/api/transcribe` over HTTPS; raw audio buffers are cleared immediately after transcription and never saved to disk. |
-| 🌐 **Multilingual Input → English Summary** | UI in **English, हिन्दी (Hindi), ಕನ್ನಡ (Kannada)** + automatic AI detection of any Indian spoken language or transliteration, always outputting a clean **English** summary for doctors. |
-| 📋 **8-Section Doctor Summary** | Organises text into: *Main Concern, Symptoms, Duration, Severity, Medical History, Current Medications, Observations, Questions to Ask the Doctor*. |
-| 🛡️ **Strict Healthcare Safety** | Never diagnoses or prescribes. Unmentioned fields stay `"Not mentioned by patient"`. Red-flag symptoms surface clickable **108 / 112** emergency helplines. |
-| ✏️ **Edit & Confirm Gate** | Patients review and edit every section individually and confirm accuracy before sharing. |
-| 📄 **Offline PDF & Sharing** | Client-side `jsPDF` (`v4.2+`) report generation, Android native Share sheet (`@capacitor/share`), and one-tap clipboard copy. |
-| 💊 **Smart Medicine Tracker** | Prescription-based reminders via `@capacitor/local-notifications`, featuring a *Next reminder* banner, daily *Mark as taken* tracking, and cross-device cloud sync. |
-| 🔐 **Guest Mode + Full Cross-Device Auth** | First-install *Get started* onboarding, zero-setup Guest Mode, or Supabase Email/Password + Google OAuth with *Forgot password* recovery, per-account storage isolation, and automatic cross-device sync of both summaries and reminders. |
-| ♿ **Elderly Accessibility & UX** | Warm cream & forest-teal editorial design, 3-way *Text Size* (`Standard / Large / Extra Large`), *High Contrast*, *Calm Display*, and native Android back-button exit from Home. |
+| 🌐 **Any Language → English Summary** | UI in **English, हिन्दी, ಕನ್ನಡ** + automatic detection of any Indian language or transliteration. Exactly one English summary is shown, stored for display and printed — never a second-language version. |
+| 📋 **8-Section Clinical Summary** | *Main Concern, Symptoms, Duration, Severity, Medical History, Current Medications, Observations, Questions to Ask*. |
+| 🔎 **Possible Symptoms (AI)** | Up to 6 common companion symptoms for the complaint (e.g. fever → chills, body ache, tiredness) shown in a separate amber panel, labelled as AI suggestions to confirm with the patient — also printed as their own PDF block. |
+| 🛡️ **Strict Healthcare Safety** | Never diagnoses or prescribes. Unmentioned fields stay `"Not mentioned by patient"`. Red-flag words the patient actually said surface clickable **108 / 112** helplines. |
+| 🗂️ **Patient Records** | Add patients one at a time; saving shows the saved card instead of the empty form. Switch the **active patient**, edit, delete, and use the active patient's details on every summary and PDF. |
+| 📎 **Prescription Intake** | Attach prescriptions from **Photos**, **Camera** or **Document** (PDF/image), WhatsApp-style. Images are shrunk to 900 px; up to 6 files per patient, stored on the phone only. |
+| ✏️ **Edit & Confirm Gate** | The doctor reviews and edits every English section and confirms accuracy before sharing. |
+| 📄 **Offline PDF & Sharing** | Client-side `jsPDF` (`v4.2+`) report, Android native Share sheet (`@capacitor/share`), and one-tap clipboard copy. |
+| 🕒 **Doctor View, Notes & Timeline** | Consultation list with review state, per-visit notes (advice, medicines, next visit), and a month-grouped timeline. |
+| 🔐 **Guest Mode + Cloud Auth** | Zero-setup Guest Mode, or Supabase Email/Password + Google OAuth with password recovery and cross-device sync of summaries and the active patient card. Patient records and prescriptions stay device-local. |
+| ♿ **Accessibility & UX** | Warm cream & forest-teal editorial design, 3-way *Text Size*, *High Contrast*, *Calm Display*, and native Android back-button exit from Home. |
+| 📴 **Offline-safe** | Offline banner, draft protection for the recorded complaint, and local records usable without a connection. |
+
+> **Removed by design:** the QR code and read-only doctor web page (`/api/share`, `/s/:token`), the follow-up questions screen, the medicine reminder feature, and dual-language summaries.
 
 ---
 
-## 📲 Patient Workflow
+## 📲 Doctor Workflow
 
-1. **Welcome & Mode** — Start instantly in **Guest Mode** or sign in with **Email / Google**.
-2. **Choose Language** — Pick **English, हिन्दी, ಕನ್ನಡ**, or another language.
-3. **Speak or Type** — Tap the microphone button inside the app to record symptoms (or type/edit manually).
-4. **AI Organisation** — VoiceCare structures your description into 8 doctor-ready sections in simple English.
-5. **Review, Edit & Confirm** — Fix any detail, add missing context, and confirm before sharing.
-6. **Download or Share PDF** — Export a clean consultation PDF or share directly with your doctor.
+1. **Welcome & Mode** — Start in **Guest Mode** or sign in with **Email / Google**.
+2. **Patients** — Tap **Add patient**, fill name, age, gender, blood group, allergies and emergency contact.
+3. **Prescription** — Attach the prescription with **Photos**, **Camera** or **Document**, then **Save information**. The saved patient card replaces the form and becomes the active patient.
+4. **Record** — Open a new consultation and record the patient's complaint in any language (or type it).
+5. **AI Summary** — VoiceCare writes one English 8-section summary and a separate list of possible symptoms to ask about.
+6. **Review & Confirm** — Correct any section, confirm, and share the PDF or plain text.
 
 ---
 
@@ -74,12 +82,13 @@ Voice-Care/
 │   ├── server.js                 # Express server, middleware & static frontend hosting
 │   ├── routes/
 │   │   ├── summary.js            # POST /api/summarize & /api/regenerate
+│   │   ├── followup.js           # POST /api/follow-up (kept for tests; no UI uses it)
 │   │   └── transcribe.js         # POST /api/transcribe (base64 audio -> text)
 │   ├── services/
-│   │   ├── geminiService.js      # Gemini model chain, low-latency STT & demo fallback
-│   │   └── safetyValidator.js    # 8-section schema & multilingual 108/112 checks
+│   │   ├── geminiService.js      # Gemini model chain, English pass, suggestions, demo fallback
+│   │   └── safetyValidator.js    # Schema enforcement, script detection, 108/112 checks
 │   └── tests/
-│       └── api.test.js           # Node built-in test suite (5/5 passing)
+│       └── api.test.js           # Node built-in test suite (9/9 passing)
 ├── frontend/
 │   ├── package.json              # Capacitor 6 Android + plugins + jsPDF
 │   ├── capacitor.config.json     # Capacitor config (appId: in.voicecare.app)
@@ -87,7 +96,7 @@ Voice-Care/
 │   │   └── copy-vendor.js        # Copies jsPDF to www/vendor/ for offline PDFs
 │   ├── android/                  # Native Capacitor Android project
 │   └── www/
-│       ├── index.html            # 12 mobile screens (UX Pilot editorial redesign)
+│       ├── index.html            # Mobile screens: home, intake, patients, history, doctor view…
 │       ├── assets/               # App launcher logo (logo.svg, logo.png) & splash-mark.svg
 │       ├── css/styles.css        # Warm cream, forest-teal & saffron accessible UI system
 │       └── js/
@@ -96,10 +105,12 @@ Voice-Care/
 │           ├── voice.js          # In-app MediaRecorder voice capture
 │           ├── api.js            # Fetch wrappers (/api/health, /summarize, /transcribe)
 │           ├── supabase.js       # Email + Google OAuth + PostgreSQL cloud sync
-│           ├── storage.js        # Local persistence for guest data & settings
+│           ├── storage.js        # Patients, prescriptions, visit history & settings
 │           ├── pdf.js            # Offline jsPDF generation & Capacitor Share
-│           ├── notifications.js  # Local medicine reminder alerts
 │           └── app.js            # Navigation & screen controllers
+├── supabase/schema.sql           # summaries table + RLS policies
+├── docs/SUPABASE-SETUP.md        # Step-by-step database setup
+├── PHASE1.md / PHASE2-3.md       # Build notes and demo script
 ├── Dockerfile                    # Lightweight Node 20 Alpine container image
 ├── docker-compose.yml            # One-command startup (no secret keys required)
 ├── .dockerignore
@@ -113,7 +124,7 @@ Voice-Care/
 ### Prerequisites
 - **Option A (Docker):** [Docker Desktop](https://www.docker.com/products/docker-desktop/) — starts in one command with zero secret keys.
 - **Option B (Local Node):** **Node.js v18+** ([nodejs.org](https://nodejs.org/))
-- *(Optional)* **Google Gemini API Key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) — **not required to run**: the app starts without any secret keys using built-in demo fallback (or connects to the hosted backend).
+- *(Optional)* **Google Gemini API Key** ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)) — **not required to run**: the app starts without any secret keys using the built-in demo fallback (which still produces English summaries and possible-symptom suggestions).
 
 ### 1️⃣ Quick Start with Docker Compose (No Keys Required)
 ```bash
@@ -126,7 +137,7 @@ Open **`http://localhost:3000`** once started (or pass an optional key: `GEMINI_
 cd backend
 npm install
 npm start     # Starts immediately at http://localhost:3000 (no .env required)
-npm test      # Runs automated validation & API tests (5 tests)
+npm test      # Runs automated validation & API tests (9 tests)
 ```
 *(On Windows PowerShell, use `npm.cmd` if `npm.ps1` is blocked by execution policy.)*
 
@@ -145,7 +156,7 @@ cd frontend
 npm install
 npm run prepare:vendor
 ```
-Open **`http://localhost:3000`** in Chrome/Edge and press `F12` → `Ctrl + Shift + M` to preview in mobile viewport mode.
+The backend serves `frontend/www` at **`http://localhost:3000`**. Press `F12` → `Ctrl + Shift + M` to preview in mobile viewport mode.
 
 ---
 
@@ -180,9 +191,9 @@ adb install -r path/to/app-debug.apk
 
 ## ☁️ Backend Deployment (Render), Security & Cloud Auth (Supabase)
 
-- **Backend Hosting:** Deployed on **Render** (`Root Directory: backend`, Region: `Singapore`, Build: `npm install`, Start: `npm start`, Env Var: `GEMINI_API_KEY`). `API_BASE_URL` in `frontend/www/js/config.js` points to the live HTTPS backend.
-- **Database & Auth:** Uses **Supabase** (`public.summaries` table with `text` primary key and Row-Level Security `select`/`insert`/`update`/`delete` policies for `authenticated` users matching `auth.uid() = user_id`), supporting Email/Password sign-in & sign-up, password reset recovery, Google OAuth via `in.voicecare.app://auth-callback`, cross-device medicine reminder sync, and live status/manual sync under **Settings → Cloud backup & sync**.
-- **Security & Reliability Hardening:** Server-side `GEMINI_API_KEY`, Helmet CSP & security headers, strict CORS allow-list, per-IP rate limiting (`30 req/min` API, `15 req/min` `/api/transcribe`), `Cache-Control: no-store` on patient audio/summary responses, abortable client fetch timeouts with concurrent-request cancellation, non-blocking offline-first startup, Android 13+ `POST_NOTIFICATIONS` permission & notification icon, and `0` production npm vulnerabilities.
+- **Backend Hosting:** Deployed on **Render** (`Root Directory: backend`, Region: `Singapore`, Build: `npm install`, Start: `npm start`, Env Var: `GEMINI_API_KEY`). Render redeploys from `main`. `API_BASE_URL` in `frontend/www/js/config.js` points to the live HTTPS backend.
+- **Database & Auth:** Uses **Supabase** (`public.summaries` table with `text` primary key and Row-Level Security `select`/`insert`/`update`/`delete` policies for `authenticated` users matching `auth.uid() = user_id`), supporting Email/Password sign-in & sign-up, password reset recovery, Google OAuth via `in.voicecare.app://auth-callback`, and live status/manual sync under **Settings → Cloud backup & sync**. Patient identity/records and prescriptions are not uploaded; only the active patient card is kept alongside the account.
+- **Security & Reliability Hardening:** Server-side `GEMINI_API_KEY`, Helmet CSP & security headers, strict CORS allow-list, per-IP rate limiting (`30 req/min` API, `15 req/min` `/api/transcribe`), `Cache-Control: no-store` on patient audio/summary responses, abortable client fetch timeouts with concurrent-request cancellation, non-blocking offline-first startup, and `0` production npm vulnerabilities.
 
 ---
 
@@ -191,5 +202,6 @@ adb install -r path/to/app-debug.apk
 - ❌ **Never** diagnoses diseases or medical conditions.
 - ❌ **Never** prescribes medicines or recommends dosages.
 - ❌ **Never** invents symptoms, timelines, or medical history (`"Not mentioned by patient"` is enforced when absent).
-- ✅ **Always** labels summaries as patient-prepared consultation aids—not verified medical records.
-- 🚨 **Always** surfaces India emergency numbers (**108 / 112**) when urgent red-flag symptoms are detected.
+- ✅ **Possible symptoms** are the single, clearly-labelled exception: they are shown apart from the patient's words, described as AI suggestions to confirm, and never folded into the summary or treated as findings.
+- ✅ **Always** labels summaries as communication aids—not verified medical records.
+- 🚨 **Always** surfaces India emergency numbers (**108 / 112**) when urgent red-flag words appear in what the patient said.

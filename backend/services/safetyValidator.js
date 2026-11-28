@@ -3,15 +3,20 @@
  *
  * Enforces healthcare communication safety rules:
  * - Never diagnose diseases or prescribe medicines/dosages
- * - Never invent missing symptoms or medical history
- * - Always return a predictable 8-section structured JSON format
- * - Flag potential emergency warning signs with India helpline guidance (108 / 112)
+ * - Never invent missing symptoms, medical history or urgency flags
+ * - Always return a predictable 8-section structured JSON format, in the
+ *   patient's language plus an English translation
+ * - Highlight only red-flag phrases the patient actually said, with India
+ *   helpline guidance (108 / 112)
  */
 
 const NOT_MENTIONED = 'Not mentioned by patient';
 
 const MANDATORY_DISCLAIMER =
   'This summary was created with AI to help you explain your health concerns to a doctor. It is NOT a medical diagnosis, prescription, or verified medical record. Please confirm all details with your doctor.';
+
+const EMERGENCY_GUIDANCE =
+  'If this is an emergency, call 108. Your description mentions words that may need urgent medical attention. VoiceCare only repeats what you said — it does not judge how serious it is.';
 
 const EMERGENCY_PATTERNS = [
   // English red-flag patterns
@@ -24,6 +29,18 @@ const EMERGENCY_PATTERNS = [
   /(ಎದೆ ನೋವು|ಉಸಿರಾಡಲು ಕಷ್ಟ|ಉಸಿರಾಟದ ತೊಂದರೆ|ಪ್ರಜ್ಞೆ ತಪ್ಪಿ|ರಕ್ತ ವಾಂತಿ)/,
   // Kanglish
   /\b(ede novu|usiradalu kashta|prajne tappi)\b/i
+];
+
+/** The 8 summary sections, in order. */
+const SUMMARY_KEYS = [
+  'mainHealthConcern',
+  'symptoms',
+  'duration',
+  'severity',
+  'relevantMedicalHistory',
+  'currentMedications',
+  'additionalObservations',
+  'questionsToAskDoctor'
 ];
 
 /**
@@ -57,24 +74,103 @@ function validatePatientInput(rawText) {
 }
 
 /**
+ * Lowercases and strips punctuation so words can be compared across formats.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function normalizeForMatch(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Finds the red-flag phrases that literally appear in the patient's text.
+ * Used only to repeat the patient's own words back to them.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function detectRedFlagPhrases(text) {
+  const source = String(text || '');
+  const found = [];
+  for (const pattern of EMERGENCY_PATTERNS) {
+    const global = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+    let match;
+    while ((match = global.exec(source)) !== null) {
+      const phrase = String(match[0] || '').trim();
+      if (phrase && !found.some((f) => normalizeForMatch(f) === normalizeForMatch(phrase))) {
+        found.push(phrase);
+      }
+      if (match.index === global.lastIndex) global.lastIndex += 1;
+      if (found.length >= 6) return found;
+    }
+  }
+  return found;
+}
+
+/**
+ * Keeps only urgency flags that the patient actually said.
+ *
+ * The AI is asked to quote the patient's own words, but a model can still
+ * paraphrase or invent a red flag. A flag is trusted only when the exact phrase
+ * appears in the description, or when every meaningful word of the flag appears
+ * in it (so "chest pain" matches "pain in my chest").
+ *
+ * @param {unknown} rawFlags
+ * @param {string} patientText
+ * @returns {string[]}
+ */
+function filterUrgentFlags(rawFlags, patientText) {
+  const haystack = normalizeForMatch(patientText);
+  const source = String(patientText || '');
+  const accepted = [];
+
+  for (const rawFlag of Array.isArray(rawFlags) ? rawFlags : []) {
+    if (typeof rawFlag !== 'string') continue;
+    const flag = rawFlag.replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (flag.length < 3) continue;
+
+    const normalizedFlag = normalizeForMatch(flag);
+    if (!normalizedFlag) continue;
+
+    const tokens = normalizedFlag.split(' ').filter((token) => token.length >= 2);
+    if (tokens.length === 0) continue;
+
+    const exact = haystack.includes(normalizedFlag);
+    const substring = source.toLowerCase().includes(flag.toLowerCase());
+    const everyTokenPresent = tokens.every((token) => haystack.includes(token));
+    // Guard against a flag that is only a stop-word match ("of the").
+    const hasSubstantialToken = tokens.some((token) => token.length >= 4);
+
+    if ((exact || substring || (everyTokenPresent && hasSubstantialToken)) &&
+        !accepted.some((f) => normalizeForMatch(f) === normalizedFlag)) {
+      accepted.push(flag);
+    }
+
+    if (accepted.length >= 6) break;
+  }
+
+  return accepted;
+}
+
+/**
  * Checks whether the patient's description mentions potential emergency warning symptoms.
  * This does NOT diagnose; it only displays an urgent care reminder.
  * @param {string} text
- * @returns {{ detected: boolean, guidance: string }}
+ * @returns {{ detected: boolean, guidance: string, phrases: string[] }}
  */
 function detectEmergencyWarning(text) {
-  const matched = EMERGENCY_PATTERNS.some((pattern) => pattern.test(text));
-  if (!matched) {
-    return {
-      detected: false,
-      guidance: ''
-    };
+  const phrases = detectRedFlagPhrases(text);
+  if (!phrases.length) {
+    return { detected: false, guidance: '', phrases: [] };
   }
 
   return {
     detected: true,
-    guidance:
-      'Your description mentions symptoms that may need urgent medical attention. If you or the patient are having severe chest pain, trouble breathing, sudden weakness, heavy bleeding, or loss of consciousness, please call 108 or 112 immediately or visit the nearest emergency hospital.'
+    guidance: EMERGENCY_GUIDANCE,
+    phrases
   };
 }
 
@@ -115,7 +211,74 @@ function normalizeArrayField(value, fallbackArray) {
 }
 
 /**
+ * Normalizes the 8-section summary object.
+ * @param {Record<string, unknown> | undefined} raw
+ * @returns {Record<string, string | string[]>}
+ */
+function normalizeSections(raw) {
+  const fallbackQuestions = [
+    'What could be causing these symptoms?',
+    'Which tests or checks do you recommend?',
+    'What warning signs should I watch out for at home?'
+  ];
+
+  return {
+    mainHealthConcern: normalizeTextField(raw?.mainHealthConcern),
+    symptoms: normalizeArrayField(raw?.symptoms, [NOT_MENTIONED]),
+    duration: normalizeTextField(raw?.duration),
+    severity: normalizeTextField(raw?.severity),
+    relevantMedicalHistory: normalizeTextField(raw?.relevantMedicalHistory),
+    currentMedications: normalizeTextField(raw?.currentMedications),
+    additionalObservations: normalizeTextField(raw?.additionalObservations),
+    questionsToAskDoctor: normalizeArrayField(raw?.questionsToAskDoctor, fallbackQuestions)
+  };
+}
+
+/**
+ * Cleans the "what is still missing" list. It may only describe gaps, never
+ * suggest a diagnosis or a treatment.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+function normalizeMissingInfo(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const cleaned = [];
+  for (const item of list) {
+    if (typeof item !== 'string') continue;
+    const text = item.replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (text.length < 2) continue;
+    if (!cleaned.includes(text)) cleaned.push(text);
+    if (cleaned.length >= 5) break;
+  }
+  return cleaned;
+}
+
+/**
+ * Cleans up to 3 follow-up questions (strings or {question} objects).
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+function normalizeFollowUpQuestions(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const cleaned = [];
+  for (const item of list) {
+    const text =
+      typeof item === 'string'
+        ? item
+        : item && typeof item === 'object' && typeof item.question === 'string'
+          ? item.question
+          : '';
+    const question = text.replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (question.length < 5) continue;
+    if (!cleaned.some((q) => q.toLowerCase() === question.toLowerCase())) cleaned.push(question);
+    if (cleaned.length >= 3) break;
+  }
+  return cleaned;
+}
+
+/**
  * Enforces the exact 8-section summary contract and attaches safety metadata.
+ *
  * @param {Record<string, unknown>} rawSummary
  * @param {string} originalText
  * @param {string} language
@@ -123,52 +286,103 @@ function normalizeArrayField(value, fallbackArray) {
  * @param {{ model?: string, demoReason?: string }} [extra]
  */
 function enforceSummarySchema(rawSummary, originalText, language, source, extra = {}) {
-  const emergency = detectEmergencyWarning(originalText);
+  const summary = normalizeSections(rawSummary);
 
-  const summary = {
-    mainHealthConcern: normalizeTextField(rawSummary?.mainHealthConcern),
-    symptoms: normalizeArrayField(rawSummary?.symptoms, [NOT_MENTIONED]),
-    duration: normalizeTextField(rawSummary?.duration),
-    severity: normalizeTextField(rawSummary?.severity),
-    relevantMedicalHistory: normalizeTextField(rawSummary?.relevantMedicalHistory),
-    currentMedications: normalizeTextField(rawSummary?.currentMedications),
-    additionalObservations: normalizeTextField(rawSummary?.additionalObservations),
-    questionsToAskDoctor: normalizeArrayField(rawSummary?.questionsToAskDoctor, [
-      'What could be causing these symptoms?',
-      'Which tests or checks do you recommend?',
-      'What warning signs should I watch out for at home?'
-    ])
-  };
+  // The English version is what a doctor who does not read the patient's
+  // language sees. When the model did not produce one (or produced something
+  // that is not English at all), fall back to the summary itself rather than
+  // inventing a translation.
+  const rawEnglish = rawSummary?.englishSummary || rawSummary?.english_summary;
+  const englishSections = normalizeSections(rawEnglish);
+  const englishIsUsable =
+    Boolean(rawEnglish) && !containsNonLatinScript(englishSections);
 
-  // Merge AI-flagged emergency note if AI also flagged something responsibly, without diagnosing
-  const emergencyDetected = Boolean(emergency.detected || rawSummary?.emergencyWarningDetected);
-  const emergencyGuidance = emergency.detected
-    ? emergency.guidance
-    : emergencyDetected
-      ? 'If symptoms feel severe or suddenly worsen, seek immediate medical care or call 108 / 112 in India.'
-      : '';
+  const englishSummary = englishIsUsable
+    ? englishSections
+    : { ...summary, questionsToAskDoctor: [...summary.questionsToAskDoctor] };
+
+  // Urgency flags are verified against the patient's own words, so nothing the
+  // model invents can ever be highlighted as an emergency.
+  let urgentFlags = filterUrgentFlags(
+    rawSummary?.urgentFlags ?? rawSummary?.urgent_flags,
+    originalText
+  );
+  if (urgentFlags.length === 0) {
+    // Fallback: the deterministic detector still only quotes the patient.
+    urgentFlags = detectRedFlagPhrases(originalText);
+  }
+
+  const missingInfo = normalizeMissingInfo(rawSummary?.missingInfo ?? rawSummary?.missing_info);
+  const followUpQuestions = normalizeFollowUpQuestions(
+    rawSummary?.followUpQuestions ?? rawSummary?.follow_up_questions
+  );
 
   return {
     summary,
+    englishSummary,
+    urgentFlags,
+    missingInfo,
+    followUpQuestions,
     metadata: {
       source,
       model: extra.model || null,
       demoReason: source === 'demo-fallback' ? extra.demoReason || null : null,
       language,
+      englishIsGenerated: englishIsUsable,
       generatedAt: new Date().toISOString(),
       disclaimer: MANDATORY_DISCLAIMER,
       emergencyWarning: {
-        detected: emergencyDetected,
-        guidance: emergencyGuidance
+        detected: urgentFlags.length > 0,
+        guidance: urgentFlags.length > 0 ? EMERGENCY_GUIDANCE : '',
+        phrases: urgentFlags
       }
     }
   };
 }
 
+/**
+ * Enforces the follow-up contract: at most 3 questions and a short list of
+ * missing details. Never returns answers — the patient supplies those.
+ * @param {Record<string, unknown>} raw
+ */
+function enforceFollowUpSchema(raw) {
+  return {
+    missingInfo: normalizeMissingInfo(raw?.missingInfo ?? raw?.missing_info),
+    followUpQuestions: normalizeFollowUpQuestions(
+      raw?.followUpQuestions ?? raw?.follow_up_questions
+    )
+  };
+}
+
+/** True when a summary object still contains non-Latin script. */
+function containsNonLatinScript(sections) {
+  if (!sections) return false;
+  const nonLatin = /[\u0600-\u06FF\u0900-\u0DFF]/;
+  const values = [
+    sections.mainHealthConcern,
+    sections.duration,
+    sections.severity,
+    sections.relevantMedicalHistory,
+    sections.currentMedications,
+    sections.additionalObservations,
+    ...(sections.symptoms || []),
+    ...(sections.questionsToAskDoctor || [])
+  ];
+  return values.some((v) => typeof v === 'string' && nonLatin.test(v));
+}
+
 module.exports = {
   NOT_MENTIONED,
   MANDATORY_DISCLAIMER,
+  EMERGENCY_GUIDANCE,
+  SUMMARY_KEYS,
   validatePatientInput,
   detectEmergencyWarning,
-  enforceSummarySchema
+  detectRedFlagPhrases,
+  filterUrgentFlags,
+  normalizeMissingInfo,
+  normalizeFollowUpQuestions,
+  containsNonLatinScript,
+  enforceSummarySchema,
+  enforceFollowUpSchema
 };

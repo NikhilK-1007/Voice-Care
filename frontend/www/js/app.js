@@ -16,7 +16,8 @@
     summary: { title: 'Health Summary', topbar: false, bottomNav: false },
     edit: { title: 'Edit Summary', topbar: false, bottomNav: false },
     pdf: { title: 'PDF Preview & Share', topbar: false, bottomNav: false },
-    reminders: { title: 'Medicine Reminders', topbar: false, bottomNav: true },
+    profile: { title: 'My Information', topbar: false, bottomNav: true },
+    followup: { title: 'Follow-up Questions', topbar: false, bottomNav: false },
     history: { title: 'Patient History', topbar: false, bottomNav: true },
     about: { title: 'Safety & Accessibility', topbar: false, bottomNav: true }
   };
@@ -33,7 +34,12 @@
     healthWarmed: false,
     syncing: false,
     lastSyncAt: 0,
-    syncStatusText: ''
+    syncStatusText: '',
+    // Follow-up step: the description waiting to be summarised and the answers
+    // the patient gave (skipped questions contribute nothing).
+    pendingPatientText: '',
+    pendingFollowUpAnswers: [],
+    followUpQuestions: []
   };
 
   // DOM helpers
@@ -151,7 +157,7 @@
     $('processing-subtitle').textContent = t.processingSubtitle;
     $('nav-label-home').textContent = t.navHome;
     $('nav-label-input').textContent = t.navDescribe;
-    $('nav-label-reminders').textContent = t.navReminders;
+    $('nav-label-profile').textContent = t.navProfile || 'My info';
     $('nav-label-history').textContent = t.navHistory;
     $('nav-label-about').textContent = t.navAbout;
 
@@ -209,8 +215,8 @@
       }
       maybeAutoSync();
     }
-    if (screenName === 'reminders') {
-      renderReminders();
+    if (screenName === 'profile') {
+      renderProfileForm();
       maybeAutoSync();
     }
     if (screenName === 'history') {
@@ -228,11 +234,34 @@
   }
 
   function renderHomeStats() {
-    const reminders = window.VOICECARE_STORAGE.getReminders();
-    const activeReminders = reminders.filter((r) => r.active !== false).length;
     const history = window.VOICECARE_STORAGE.getHistory();
-    $('home-reminder-count').textContent = `${activeReminders} active reminder${activeReminders === 1 ? '' : 's'}`;
+    const profile = window.VOICECARE_STORAGE.getProfile();
+    const hasProfile = Boolean(profile.name || profile.age || profile.bloodGroup);
+    $('home-profile-summary').textContent = hasProfile
+      ? quickInfoLine(profile)
+      : 'Add name, age, blood group';
     $('home-history-count').textContent = `${history.length} saved visit${history.length === 1 ? '' : 's'}`;
+  }
+
+  /** One-line patient identity used on the home tile, summary and PDF. */
+  function quickInfoLine(profile = {}) {
+    const parts = [];
+    if (profile.name) parts.push(profile.name);
+    if (profile.age) parts.push(`${profile.age} yrs`);
+    if (profile.gender) parts.push(profile.gender);
+    if (profile.bloodGroup) parts.push(`Blood group ${profile.bloodGroup}`);
+    if (profile.allergies) parts.push(`Allergies: ${profile.allergies}`);
+    return parts.join(' · ');
+  }
+
+  function renderProfileForm() {
+    const profile = window.VOICECARE_STORAGE.getProfile();
+    $('profile-name').value = profile.name || '';
+    $('profile-age').value = profile.age || '';
+    $('profile-gender').value = profile.gender || '';
+    $('profile-blood').value = profile.bloodGroup || '';
+    $('profile-allergies').value = profile.allergies || '';
+    $('profile-emergency').value = profile.emergencyContact || '';
   }
 
   function updateInputMeta() {
@@ -282,27 +311,101 @@
     const entry = state.currentEntry;
     if (!entry) return;
 
-    const emergency = entry.metadata?.emergencyWarning;
-    const emergencyEl = $('summary-emergency-banner');
-    if (emergency && emergency.detected) {
-      emergencyEl.style.display = 'block';
-      $('summary-emergency-text').textContent = emergency.guidance;
-    } else {
-      emergencyEl.style.display = 'none';
-    }
+    renderUrgencyBanner(entry);
 
     $('summary-disclaimer-text').textContent =
       entry.metadata?.disclaimer ||
       'For doctor communication only — not a medical diagnosis or prescription.';
 
-    $('summary-lang-badge').textContent = 'English';
+    const languageLabel = entry.languageLabel || 'English';
+    $('summary-lang-badge').textContent = languageLabel;
+    $('summary-native-label').textContent = `Your words · ${languageLabel}`;
+
     const meta = entry.metadata || {};
     $('summary-source-badge').textContent =
       meta.source === 'gemini'
         ? `Organised with Gemini AI${meta.model ? ` · ${meta.model}` : ''}`
         : `Basic local extractor used — the AI model was unavailable. Tap Regenerate to try again.`;
 
-    $('summary-sections-container').innerHTML = buildSummarySectionHtml(entry.summary);
+    $('summary-sections-container').innerHTML = buildSummarySectionHtml(entry.summary || {});
+    $('summary-english-container').innerHTML = buildSummarySectionHtml(
+      entry.englishSummary || entry.summary || {}
+    );
+
+    renderQuickInfoStrip(entry);
+    renderOriginalWords(entry);
+    setSummaryView('ai');
+  }
+
+  /**
+   * Shows only the red flags the backend verified against the patient's own
+   * words. Nothing here is a diagnosis or a severity judgement.
+   */
+  function renderUrgencyBanner(entry) {
+    const banner = $('summary-emergency-banner');
+    const meta = entry.metadata?.emergencyWarning || {};
+    const flags = (Array.isArray(entry.urgentFlags) ? entry.urgentFlags : [])
+      .concat(Array.isArray(meta.phrases) ? meta.phrases : [])
+      .map((flag) => String(flag || '').trim())
+      .filter(Boolean)
+      .filter((flag, index, list) => list.findIndex((f) => f.toLowerCase() === flag.toLowerCase()) === index)
+      .slice(0, 6);
+
+    if (!flags.length && !meta.detected) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    banner.style.display = 'block';
+    $('summary-urgent-flags').innerHTML = flags
+      .map((flag) => `<li>${escapeHtml(flag)}</li>`)
+      .join('');
+    $('summary-emergency-text').textContent =
+      'These are your own words, repeated so your doctor sees them first. VoiceCare does not decide how serious they are.';
+  }
+
+  function renderQuickInfoStrip(entry) {
+    const strip = $('summary-quickinfo-strip');
+    const profile = entry.quickInfo || window.VOICECARE_STORAGE.getProfile();
+    const line = quickInfoLine(profile);
+    if (!line) {
+      strip.classList.add('hidden');
+      strip.innerHTML = '';
+      return;
+    }
+    strip.classList.remove('hidden');
+    strip.innerHTML = `<svg class="icon icon-sm" aria-hidden="true"><use href="#i-user"></use></svg><span>${escapeHtml(line)}</span>`;
+  }
+
+  function renderOriginalWords(entry) {
+    $('summary-original-text').textContent = entry.patientText || 'No description was saved for this visit.';
+
+    const answers = (Array.isArray(entry.followUpAnswers) ? entry.followUpAnswers : []).filter(
+      (item) => item && String(item.answer || '').trim()
+    );
+    const panel = $('summary-answers-panel');
+    if (answers.length) {
+      panel.classList.remove('hidden');
+      $('summary-answers-list').innerHTML = answers
+        .map(
+          (item) =>
+            `<li><strong>${escapeHtml(item.question || 'Question')}</strong><br />${escapeHtml(item.answer)}</li>`
+        )
+        .join('');
+    } else {
+      panel.classList.add('hidden');
+    }
+  }
+
+  function setSummaryView(view) {
+    const isOriginal = view === 'original';
+    $('summary-ai-pane').classList.toggle('hidden', isOriginal);
+    $('summary-original-pane').classList.toggle('hidden', !isOriginal);
+    document.querySelectorAll('[data-summary-view]').forEach((btn) => {
+      const active = btn.getAttribute('data-summary-view') === view;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', String(active));
+    });
   }
 
   function populateEditForm() {
@@ -332,10 +435,33 @@
       dateStyle: 'medium',
       timeStyle: 'short'
     });
-    const patientPart = entry.patientName ? `Patient: ${entry.patientName} • ` : '';
-    $('pdf-meta-line').textContent = `${patientPart}Prepared: ${dateStr} • Language: ${entry.languageLabel || 'English'}`;
+    const infoLine = window.VOICECARE_PDF?.patientLine?.(entry) || '';
+    $('pdf-meta-line').textContent = `${infoLine ? `${infoLine} • ` : ''}Prepared: ${dateStr} • Language: ${entry.languageLabel || 'English'}`;
 
-    $('pdf-preview-body').innerHTML = buildSummarySectionHtml(entry.summary);
+    const flags = (Array.isArray(entry.urgentFlags) ? entry.urgentFlags : []).filter(Boolean);
+    const flagHtml = flags.length
+      ? `<section class="alert alert-danger" style="display:block; margin-bottom: 12px;">
+           <p class="alert-title">Urgent words said by the patient</p>
+           <ul class="urgent-flag-list">${flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join('')}</ul>
+           <p class="urgent-call-line">If this is an emergency, call 108.</p>
+         </section>`
+      : '';
+
+    const original = entry.patientText
+      ? `<section class="panel">
+           <p class="section-label" style="margin-top: 0;">Patient's exact words</p>
+           <p class="original-text">${escapeHtml(entry.patientText)}</p>
+         </section>`
+      : '';
+
+    $('pdf-preview-body').innerHTML = `
+      ${flagHtml}
+      <p class="summary-lang-label">Patient's language · ${escapeHtml(entry.languageLabel || 'English')}</p>
+      ${buildSummarySectionHtml(entry.summary || {})}
+      <p class="summary-lang-label">English version</p>
+      ${buildSummarySectionHtml(entry.englishSummary || entry.summary || {})}
+      ${original}
+    `;
   }
 
   function abortActiveSummaryRequest() {
@@ -368,6 +494,7 @@
         patientText,
         language: state.language,
         extraNotes,
+        followUpAnswers: state.pendingFollowUpAnswers,
         endpoint,
         signal: controller.signal
       });
@@ -386,6 +513,13 @@
         language: state.language,
         languageLabel: langObj.nativeName,
         summary: result.summary,
+        englishSummary: result.englishSummary,
+        urgentFlags: Array.isArray(result.urgentFlags) ? result.urgentFlags : [],
+        missingInfo: Array.isArray(result.missingInfo) ? result.missingInfo : [],
+        followUpAnswers: state.pendingFollowUpAnswers,
+        // Snapshot the quick-info card so an old summary keeps the details it
+        // was created with, even if the patient edits the card later.
+        quickInfo: window.VOICECARE_STORAGE.getProfile(),
         metadata: result.metadata,
         confirmed: false,
         synced: false,
@@ -425,13 +559,12 @@
       titleEl.textContent = state.user.email ? `Cloud sync · ${state.user.email}` : 'Cloud backup & sync';
     }
     if (state.syncing) {
-      statusEl.textContent = 'Syncing summaries & reminders…';
+      statusEl.textContent = 'Syncing summaries…';
     } else if (state.syncStatusText) {
       statusEl.textContent = state.syncStatusText;
     } else {
       const hCount = window.VOICECARE_STORAGE.getHistory(state.user.uid).length;
-      const rCount = window.VOICECARE_STORAGE.getReminders(state.user.uid).length;
-      statusEl.textContent = `Tap to sync now (${hCount} summaries · ${rCount} reminders)`;
+      statusEl.textContent = `Tap to sync now (${hCount} saved summar${hCount === 1 ? "y" : "ies"})`;
     }
   }
 
@@ -444,13 +577,6 @@
     if (res && res.ok && Array.isArray(res.items)) return res;
     if (res && res.ok === false) return res;
     return { ok: false, error: 'Could not load cloud summaries.' };
-  }
-
-  function normalizeReminderLoad(res) {
-    if (!res) return { ok: false, error: 'Could not load cloud reminders.' };
-    if (res.ok === false) return res;
-    if (Array.isArray(res.items)) return { ok: true, items: res.items, deleted: res.deleted || [], updatedAt: res.updatedAt || '' };
-    return { ok: false, error: 'Could not load cloud reminders.' };
   }
 
   function persistEntryToCloud(entry) {
@@ -467,23 +593,6 @@
         updateSyncStatusUi();
       })
       ?.catch(() => {});
-  }
-
-  function syncRemindersNow() {
-    const user = state.user;
-    if (!user || user.mode !== 'supabase') return;
-    const reminders = window.VOICECARE_STORAGE.getReminders(user.uid);
-    const deleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
-    window.VOICECARE_SUPABASE?.syncRemindersToCloud?.(user, reminders, deleted)
-      ?.then((res) => {
-        if (isCloudOk(res)) {
-          state.syncStatusText = 'All summaries & reminders synced';
-        } else if (res?.error) {
-          state.syncStatusText = res.error;
-        }
-        updateSyncStatusUi();
-      })
-      ?.catch?.(() => {});
   }
 
   function maybeAutoSync() {
@@ -505,19 +614,17 @@
 
       // Immediately reflect any locally adopted summaries/reminders before network returns
       if (state.currentScreen === 'home') renderHomeStats();
-      if (state.currentScreen === 'reminders') renderReminders();
       if (state.currentScreen === 'history') renderHistory();
 
-      const [rawSumRes, rawRemRes] = await Promise.all([
-        window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch((e) => ({ ok: false, error: e.message })),
-        window.VOICECARE_SUPABASE.loadCloudReminders(user).catch((e) => ({ ok: false, error: e.message }))
-      ]);
+      const rawSumRes = await window.VOICECARE_SUPABASE.loadCloudSummaries(user).catch((e) => ({
+        ok: false,
+        error: e.message
+      }));
 
       const sumRes = normalizeSummaryLoad(rawSumRes);
-      const remRes = normalizeReminderLoad(rawRemRes);
       const syncErrors = [];
 
-      if (sumRes.authExpired || remRes.authExpired) {
+      if (sumRes.authExpired) {
         state.syncStatusText = 'Sign-in session expired. Please sign out and sign in again to sync.';
         if (!silent) showToast(state.syncStatusText);
         return;
@@ -571,72 +678,16 @@
         syncErrors.push(sumRes.error);
       }
 
-      if (remRes.ok) {
-        const localReminders = window.VOICECARE_STORAGE.getReminders(user.uid);
-        const localDeleted = window.VOICECARE_STORAGE.getDeletedReminderIds(user.uid);
-        const cloudDeletedSet = new Set(remRes.deleted || []);
-        const localDeletedSet = new Set(localDeleted);
-
-        const mergedRemMap = new Map();
-        for (const c of remRes.items || []) {
-          if (!localDeletedSet.has(c.id)) {
-            mergedRemMap.set(c.id, c);
-          }
-        }
-
-        let needsCloudUpload = localDeleted.length > 0;
-        for (const l of localReminders) {
-          if (!l || !l.id || cloudDeletedSet.has(l.id)) continue;
-          const existing = mergedRemMap.get(l.id);
-          if (!existing) {
-            mergedRemMap.set(l.id, l);
-            needsCloudUpload = true;
-          } else {
-            const lTime = String(l.updatedAt || '');
-            const cTime = String(existing.updatedAt || '');
-            if (lTime > cTime) {
-              mergedRemMap.set(l.id, l);
-              needsCloudUpload = true;
-            }
-          }
-        }
-
-        const mergedReminders = Array.from(mergedRemMap.values());
-        const mergedDeleted = Array.from(
-          new Set([...(remRes.deleted || []), ...localDeleted])
-        ).slice(0, 30);
-
-        window.VOICECARE_STORAGE.saveReminders(mergedReminders, user.uid);
-        window.VOICECARE_STORAGE.saveDeletedReminderIds(mergedDeleted, user.uid);
-
-        if (needsCloudUpload) {
-          const remUpload = await window.VOICECARE_SUPABASE.syncRemindersToCloud(
-            user,
-            mergedReminders,
-            mergedDeleted
-          );
-          if (!isCloudOk(remUpload) && remUpload?.error) {
-            syncErrors.push(remUpload.error);
-          }
-        }
-
-        await window.VOICECARE_NOTIFICATIONS?.scheduleAllReminders?.(mergedReminders);
-      } else if (remRes.error) {
-        syncErrors.push(remRes.error);
-      }
-
       state.lastSyncAt = Date.now();
       if (syncErrors.length > 0) {
         state.syncStatusText = `Sync issue: ${syncErrors[0]}`;
         if (!silent) showToast(state.syncStatusText);
       } else {
         const hLen = window.VOICECARE_STORAGE.getHistory(user.uid).length;
-        const rLen = window.VOICECARE_STORAGE.getReminders(user.uid).length;
-        state.syncStatusText = `Synced (${hLen} summaries · ${rLen} reminders)`;
+        state.syncStatusText = `Synced (${hLen} saved summar${hLen === 1 ? 'y' : 'ies'})`;
       }
 
       if (state.currentScreen === 'home') renderHomeStats();
-      if (state.currentScreen === 'reminders') renderReminders();
       if (state.currentScreen === 'history') renderHistory();
     } finally {
       state.syncing = false;
@@ -649,140 +700,6 @@
     if (!box) return;
     box.value = window.VOICECARE_STORAGE.getDraftText();
     updateInputMeta();
-  }
-
-  function formatTime12h(time24) {
-    const [hStr, mStr] = String(time24 || '08:00').split(':');
-    let h = Number(hStr) || 0;
-    const m = String(Number(mStr) || 0).padStart(2, '0');
-    const period = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${m} ${period}`;
-  }
-
-  function renderReminders() {
-    const list = window.VOICECARE_STORAGE.getReminders();
-    const todayKey = new Date().toDateString();
-    const container = $('reminders-list');
-    const remForm = $('reminder-form');
-    const nextBanner = $('next-reminder-banner');
-    const nextText = $('next-reminder-text');
-    const subEl = $('reminders-subtitle');
-
-    const sorted = [...list].sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
-    const remaining = sorted.filter((r) => r.takenDate !== todayKey);
-
-    if (subEl) {
-      subEl.textContent = sorted.length
-        ? `Today · ${remaining.length} of ${sorted.length} remaining`
-        : 'Today · No reminders scheduled';
-    }
-
-    if (remaining.length > 0 && nextBanner && nextText) {
-      const next = remaining[0];
-      nextBanner.classList.remove('hidden');
-      nextText.textContent = `${formatTime12h(next.time)} · ${next.name}`;
-    } else if (nextBanner) {
-      nextBanner.classList.add('hidden');
-    }
-
-    if (!sorted.length) {
-      if (remForm) remForm.classList.remove('hidden');
-      container.innerHTML = `<div class="empty-state">No medicine reminders yet. Use the form above to add one.</div>`;
-      return;
-    }
-
-    const nextDueId = remaining[0]?.id;
-
-    container.innerHTML = sorted
-      .map((rem) => {
-        const isTaken = rem.takenDate === todayKey;
-        const isDue = !isTaken && rem.id === nextDueId;
-        return `
-      <div class="med-card${isDue ? ' is-due' : ''}">
-        <div class="med-card-top">
-          <div class="med-card-left">
-            <span class="med-icon"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-pill"></use></svg></span>
-            <div>
-              <p class="med-name">${escapeHtml(rem.name)}</p>
-              ${rem.dosageNote ? `<p class="med-note">${escapeHtml(rem.dosageNote)}</p>` : ''}
-            </div>
-          </div>
-          ${
-            isTaken
-              ? `<button class="taken-check" data-rem-take="${escapeHtml(rem.id)}" type="button" aria-label="Marked as taken"><svg class="icon icon-sm"><use href="#i-check"></use></svg></button>`
-              : ''
-          }
-        </div>
-        <div class="med-tags">
-          <span class="tag-pill"><svg class="icon icon-sm" style="width:13px;height:13px;"><use href="#i-clock"></use></svg> ${escapeHtml(formatTime12h(rem.time))}</span>
-          <span class="tag-pill is-meal">${escapeHtml(rem.timingTag)}</span>
-          ${isTaken ? '<span class="tag-pill is-taken">Taken</span>' : ''}
-        </div>
-        ${
-          isDue
-            ? `<button class="btn btn-primary" data-rem-take="${escapeHtml(rem.id)}" type="button" style="margin-top: 12px; min-height: 44px;">Mark as taken</button>`
-            : ''
-        }
-        <div class="item-actions">
-          ${
-            !isDue && !isTaken
-              ? `<button class="btn btn-secondary btn-sm" data-rem-take="${escapeHtml(rem.id)}" type="button">Mark taken</button>`
-              : ''
-          }
-          <button class="btn btn-quiet btn-sm" data-rem-test="${escapeHtml(rem.id)}" type="button">
-            Test alert
-          </button>
-          <button class="btn btn-danger btn-sm" data-rem-del="${escapeHtml(rem.id)}" type="button">
-            Delete
-          </button>
-        </div>
-      </div>
-    `;
-      })
-      .join('');
-
-    container.querySelectorAll('[data-rem-take]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-rem-take');
-        const now = new Date().toISOString();
-        const all = window.VOICECARE_STORAGE.getReminders().map((r) =>
-          r.id === id
-            ? { ...r, takenDate: r.takenDate === todayKey ? '' : todayKey, updatedAt: now }
-            : r
-        );
-        window.VOICECARE_STORAGE.saveReminders(all);
-        syncRemindersNow();
-        renderReminders();
-      });
-    });
-
-    container.querySelectorAll('[data-rem-del]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-rem-del');
-        await window.VOICECARE_NOTIFICATIONS.cancelReminder(id);
-        const updated = window.VOICECARE_STORAGE.getReminders().filter((r) => r.id !== id);
-        window.VOICECARE_STORAGE.saveReminders(updated);
-        window.VOICECARE_STORAGE.recordDeletedReminderId(id);
-        syncRemindersNow();
-        renderReminders();
-        showToast('Reminder removed.');
-      });
-    });
-
-    container.querySelectorAll('[data-rem-test]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-rem-test');
-        const rem = window.VOICECARE_STORAGE.getReminders().find((r) => r.id === id);
-        if (!rem) return;
-        const sent = await window.VOICECARE_NOTIFICATIONS.sendTestNotification(rem);
-        showToast(
-          sent
-            ? `Reminder notification sent for ${rem.name}`
-            : `Reminder: Time for ${rem.name} (${rem.timingTag})`
-        );
-      });
-    });
   }
 
   function renderHistory() {
@@ -852,6 +769,103 @@
         showToast('Saved summary deleted.');
       });
     });
+  }
+
+  /**
+   * Renders one skippable card per follow-up question, each with its own answer
+   * box (typed or dictated).
+   * @param {string[]} questions
+   */
+  function renderFollowUpForm(questions) {
+    const container = $('followup-list');
+    container.innerHTML = questions
+      .map(
+        (question, index) => `
+      <section class="followup-card" data-fu-card="${index}">
+        <p class="followup-question"><span class="followup-number">${index + 1}</span>${escapeHtml(question)}</p>
+        <textarea
+          id="fu-answer-${index}"
+          class="textarea"
+          rows="2"
+          maxlength="300"
+          placeholder="Type your answer, or tap Speak answer"
+        ></textarea>
+        <div class="inline-pills" style="margin-top: 8px;">
+          <button class="btn btn-secondary btn-sm" data-fu-mic="${index}" type="button">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-mic"></use></svg>
+            Speak answer
+          </button>
+          <button class="btn btn-quiet btn-sm" data-fu-skip="${index}" type="button">Skip</button>
+        </div>
+      </section>`
+      )
+      .join('');
+
+    container.querySelectorAll('[data-fu-mic]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = btn.getAttribute('data-fu-mic');
+        window.VOICECARE_VOICE?.setTarget?.(`fu-answer-${index}`);
+        window.VOICECARE_VOICE?.toggle?.();
+      });
+    });
+
+    container.querySelectorAll('[data-fu-skip]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = btn.getAttribute('data-fu-skip');
+        const area = $(`fu-answer-${index}`);
+        if (area) area.value = '';
+        container.querySelector(`[data-fu-card="${index}"]`)?.classList.add('is-skipped');
+      });
+    });
+  }
+
+  /** Only answers the patient actually gave are sent; a skip contributes nothing. */
+  function collectFollowUpAnswers() {
+    const answers = [];
+    state.followUpQuestions.forEach((question, index) => {
+      const area = $(`fu-answer-${index}`);
+      const answer = area ? String(area.value || '').trim() : '';
+      if (answer) answers.push({ question, answer: answer.slice(0, 300) });
+    });
+    return answers;
+  }
+
+  /**
+   * Asks the backend what is missing, then either shows the questions or goes
+   * straight to the summary when the description is already complete.
+   * @param {string} patientText
+   */
+  async function startFollowUpStep(patientText) {
+    state.pendingPatientText = patientText;
+    state.pendingFollowUpAnswers = [];
+    state.followUpQuestions = [];
+
+    abortActiveSummaryRequest();
+    navigate('processing');
+
+    try {
+      const data = await window.VOICECARE_API.getFollowUpQuestions({
+        patientText,
+        language: state.language
+      });
+
+      const questions = (Array.isArray(data?.followUpQuestions) ? data.followUpQuestions : [])
+        .filter((q) => typeof q === 'string' && q.trim())
+        .slice(0, 3);
+
+      if (!questions.length) {
+        runAiSummarization({ patientText, endpoint: 'summarize' });
+        return;
+      }
+
+      state.followUpQuestions = questions;
+      renderFollowUpForm(questions);
+      $('followup-status').textContent = '';
+      navigate('followup');
+    } catch {
+      // The question step must never block a patient from getting a summary.
+      runAiSummarization({ patientText, endpoint: 'summarize' });
+    }
   }
 
   function wireEvents() {
@@ -1237,7 +1251,7 @@
       navigate('input');
     });
     $('tile-language').addEventListener('click', () => navigate('language'));
-    $('tile-reminders').addEventListener('click', () => navigate('reminders'));
+    $('tile-profile').addEventListener('click', () => navigate('profile'));
     $('tile-history').addEventListener('click', () => navigate('history'));
     $('tile-about').addEventListener('click', () => navigate('about'));
 
@@ -1302,7 +1316,50 @@
         return;
       }
       state.currentEntry = null;
-      runAiSummarization({ patientText: text, endpoint: 'summarize' });
+      startFollowUpStep(text);
+    });
+
+    // 5b. Follow-up questions — answers are optional, skipping is always allowed.
+    function submitFollowUp(withAnswers) {
+      if (window.VOICECARE_VOICE?.isRecording?.()) window.VOICECARE_VOICE.stop();
+      if (window.VOICECARE_VOICE?.isBusy?.()) {
+        showToast('Please wait while your answer is written down.');
+        return;
+      }
+      window.VOICECARE_VOICE?.setTarget?.('patient-input-box');
+      state.pendingFollowUpAnswers = withAnswers ? collectFollowUpAnswers() : [];
+      runAiSummarization({
+        patientText: state.pendingPatientText || inputBox.value.trim(),
+        endpoint: 'summarize'
+      });
+    }
+
+    $('btn-followup-continue')?.addEventListener('click', () => submitFollowUp(true));
+    $('btn-followup-skip')?.addEventListener('click', () => submitFollowUp(false));
+
+    // 5c. Quick-info card — saved once, attached to every summary and PDF.
+    $('profile-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const profile = window.VOICECARE_STORAGE.saveProfile({
+        name: $('profile-name').value,
+        age: $('profile-age').value,
+        gender: $('profile-gender').value,
+        bloodGroup: $('profile-blood').value,
+        allergies: $('profile-allergies').value,
+        emergencyContact: $('profile-emergency').value
+      });
+      renderHomeStats();
+      if (state.currentEntry && state.currentScreen === 'summary') renderSummaryScreen();
+      showToast(
+        profile.name
+          ? `Saved. ${profile.name}'s details will appear on every summary.`
+          : 'Saved. These details will appear on every summary.'
+      );
+    });
+
+    // 5d. Original words vs AI summary
+    document.querySelectorAll('[data-summary-view]').forEach((btn) => {
+      btn.addEventListener('click', () => setSummaryView(btn.getAttribute('data-summary-view')));
     });
 
     // 6. AI Processing cancel
@@ -1322,6 +1379,7 @@
         showToast('Original description is unavailable for regeneration.');
         return;
       }
+      state.pendingFollowUpAnswers = state.currentEntry.followUpAnswers || [];
       runAiSummarization({
         patientText: state.currentEntry.patientText,
         endpoint: 'regenerate'
@@ -1331,6 +1389,18 @@
     $('btn-go-pdf').addEventListener('click', () => {
       renderPdfPreview();
       navigate('pdf');
+      window.VOICECARE_SHARE?.showForEntry?.(state.currentEntry);
+    });
+
+    // 7b. QR share (doctor opens it in a browser, no login)
+    $('btn-copy-share-link')?.addEventListener('click', () => window.VOICECARE_SHARE?.copyLink?.());
+    $('btn-share-link')?.addEventListener('click', async () => {
+      if (!state.currentEntry) return;
+      try {
+        await window.VOICECARE_SHARE.nativeShare(state.currentEntry);
+      } catch (err) {
+        showToast(err.message || 'Could not share the link.');
+      }
     });
 
     // 8. Edit Summary Screen
@@ -1340,6 +1410,7 @@
         return;
       }
       const extraNotes = $('edit-extra-notes').value.trim();
+      state.pendingFollowUpAnswers = state.currentEntry.followUpAnswers || [];
       runAiSummarization({
         patientText: state.currentEntry.patientText,
         extraNotes,
@@ -1442,66 +1513,6 @@
       }
     });
 
-    // 10. Medicine Reminders
-    $('btn-toggle-rem-form')?.addEventListener('click', () => {
-      $('reminder-form')?.classList.toggle('hidden');
-      if (!$('reminder-form')?.classList.contains('hidden')) {
-        $('rem-name')?.focus();
-      }
-    });
-
-    $('reminder-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = sanitizeInput($('rem-name').value, 100);
-      const time = $('rem-time').value;
-      const timingTag = $('rem-timing-tag').value;
-      const dosageNote = sanitizeInput($('rem-note').value, 120);
-
-      if (!name) {
-        showToast('Please enter the medicine name.');
-        $('rem-name')?.focus();
-        return;
-      }
-      if (!time) {
-        showToast('Please select a reminder time.');
-        $('rem-time')?.focus();
-        return;
-      }
-
-      const submitBtn = $('reminder-form').querySelector('[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-
-      try {
-        const reminder = {
-          id: `rem_${Date.now()}`,
-          name,
-          time,
-          timingTag,
-          dosageNote,
-          active: true,
-          updatedAt: new Date().toISOString()
-        };
-
-        const list = window.VOICECARE_STORAGE.getReminders();
-        list.unshift(reminder);
-        window.VOICECARE_STORAGE.saveReminders(list);
-        syncRemindersNow();
-        const schedRes = await window.VOICECARE_NOTIFICATIONS.scheduleReminder(reminder);
-
-        $('reminder-form').reset();
-        $('rem-time').value = '08:00';
-        $('reminder-form').classList.add('hidden');
-        renderReminders();
-        if (schedRes && schedRes.scheduled === false && schedRes.reason === 'permission-denied') {
-          showToast(`Saved ${name}. Allow notifications in settings to hear alerts.`);
-        } else {
-          showToast(`Medicine reminder added for ${name}`);
-        }
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    });
-
     // 11. History search
     $('history-search').addEventListener('input', renderHistory);
 
@@ -1556,12 +1567,6 @@
 
     $('btn-logout').addEventListener('click', async () => {
       abortActiveSummaryRequest();
-      if (state.user?.mode === 'supabase') {
-        const activeReminders = window.VOICECARE_STORAGE.getReminders(state.user.uid);
-        for (const r of activeReminders) {
-          await window.VOICECARE_NOTIFICATIONS?.cancelReminder?.(r.id);
-        }
-      }
       await window.VOICECARE_SUPABASE?.signOut?.();
       window.VOICECARE_STORAGE.clearUser();
       state.user = null;

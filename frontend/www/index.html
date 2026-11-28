@@ -356,13 +356,13 @@
             </span>
           </button>
 
-          <button id="tile-reminders" class="quick-tile" type="button">
+          <button id="tile-profile" class="quick-tile" type="button">
             <span class="tile-badge-icon tile-icon-gold">
-              <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
+              <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg>
             </span>
             <span>
-              <span class="quick-tile-title">Medicine Reminders</span>
-              <span class="quick-tile-meta" id="home-reminder-count">0 active reminders</span>
+              <span class="quick-tile-title">Quick-Info Card</span>
+              <span class="quick-tile-meta" id="home-profile-summary">Add name, age, blood group</span>
             </span>
           </button>
 
@@ -535,11 +535,37 @@
         </div>
       </section>
 
+      <!-- 6b · AI FOLLOW-UP QUESTIONS -->
+      <section id="screen-followup" class="screen" aria-label="Follow-up questions">
+        <div class="page-head">
+          <p class="eyebrow">Before your summary</p>
+          <h2 class="page-title">A few quick questions</h2>
+          <p class="page-sub">
+            Your doctor will want these details. Answer any of them, or skip all of them — your summary is made from what you already said.
+          </p>
+        </div>
+
+        <div id="followup-list" class="stack"></div>
+
+        <p id="followup-status" class="voice-status" role="status" aria-live="polite"></p>
+
+        <button id="btn-followup-continue" class="btn btn-gold" type="button">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-sparkles"></use></svg>
+          Create my summary
+        </button>
+        <button id="btn-followup-skip" class="btn btn-quiet" type="button">
+          Skip all questions
+        </button>
+        <p class="footnote">VoiceCare never answers these for you. Empty answers stay empty.</p>
+      </section>
+
       <!-- 7 · SUMMARY (PDF Page 2) -->
       <section id="screen-summary" class="screen" aria-label="Health summary">
         <div id="summary-emergency-banner" class="alert alert-danger" style="display: none;">
-          <p class="alert-title">Urgent care guidance</p>
-          <p id="summary-emergency-text"></p>
+          <p class="alert-title">Urgent words in your description</p>
+          <ul id="summary-urgent-flags" class="urgent-flag-list"></ul>
+          <p id="summary-emergency-text" class="urgent-explainer"></p>
+          <p class="urgent-call-line">If this is an emergency, call 108.</p>
           <div class="emergency-banner-links no-print">
             <a class="emergency-banner-call" href="tel:108">
               <svg class="icon icon-sm" aria-hidden="true"><use href="#i-phone"></use></svg>
@@ -568,7 +594,53 @@
           Organised with Gemini AI
         </p>
 
-        <div id="summary-sections-container"></div>
+        <div class="quickinfo-strip hidden" id="summary-quickinfo-strip"></div>
+
+        <div class="segmented summary-toggle" role="tablist" aria-label="What to show">
+          <button
+            id="tab-summary-ai"
+            class="segment segment-teal is-active"
+            data-summary-view="ai"
+            role="tab"
+            aria-selected="true"
+            type="button"
+          >
+            AI summary
+          </button>
+          <button
+            id="tab-summary-original"
+            class="segment segment-teal"
+            data-summary-view="original"
+            role="tab"
+            aria-selected="false"
+            type="button"
+          >
+            My exact words
+          </button>
+        </div>
+
+        <div id="summary-ai-pane" class="summary-dual">
+          <div class="summary-lang-block">
+            <p class="summary-lang-label" id="summary-native-label">Your language</p>
+            <div id="summary-sections-container"></div>
+          </div>
+          <div class="summary-lang-block summary-lang-english">
+            <p class="summary-lang-label">English version</p>
+            <div id="summary-english-container"></div>
+          </div>
+        </div>
+
+        <div id="summary-original-pane" class="hidden">
+          <section class="panel">
+            <p class="section-label" style="margin-top: 0;">What you said, word for word</p>
+            <p id="summary-original-text" class="original-text"></p>
+          </section>
+          <section id="summary-answers-panel" class="panel panel-tint hidden">
+            <p class="section-label" style="margin-top: 0;">Your answers to the follow-up questions</p>
+            <ul id="summary-answers-list" class="record-list"></ul>
+          </section>
+          <p class="footnote">Nothing here is edited. Your doctor sees your own words beside the AI summary.</p>
+        </div>
 
         <div class="stack" style="margin-top: 16px;">
           <button id="btn-go-pdf" class="btn btn-primary" type="button">
@@ -685,6 +757,23 @@
           </footer>
         </article>
 
+        <section id="share-qr-wrap" class="panel qr-panel hidden">
+          <div class="panel-head">
+            <h3 class="panel-title">QR code for your doctor</h3>
+            <p class="panel-sub">
+              Your doctor scans this with any phone camera and reads the summary in the browser. No login, no app install.
+            </p>
+          </div>
+          <canvas id="share-qr-canvas" class="qr-canvas" width="240" height="240" aria-label="QR code linking to your summary"></canvas>
+          <p id="share-link-text" class="share-link"></p>
+          <p id="share-expiry-text" class="section-meta"></p>
+          <div class="btn-row">
+            <button id="btn-copy-share-link" class="btn btn-secondary btn-sm" type="button">Copy link</button>
+            <button id="btn-share-link" class="btn btn-secondary btn-sm" type="button">Send link</button>
+          </div>
+          <p id="share-status" class="voice-status" role="status" aria-live="polite"></p>
+        </section>
+
         <div class="stack no-print">
           <button id="btn-download-pdf" class="btn btn-primary" type="button">
             <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
@@ -703,68 +792,70 @@
         </div>
       </section>
 
-      <!-- 10 · MEDICINES (PDF Page 3) -->
-      <section id="screen-reminders" class="screen" aria-label="Medicine reminders">
-        <div class="page-head-row">
-          <div>
-            <h2 class="page-title">Medicines</h2>
-            <p class="page-sub" id="reminders-subtitle">Today · 0 active reminders</p>
-          </div>
-          <button id="btn-toggle-rem-form" class="btn btn-primary btn-icon-square" type="button" aria-label="Add medicine reminder">
-            <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>
-          </button>
+      <!-- 10 · QUICK-INFO CARD (replaces medicine reminders) -->
+      <section id="screen-profile" class="screen" aria-label="My information">
+        <div class="page-head">
+          <p class="eyebrow">Fill once</p>
+          <h2 class="page-title">My information</h2>
+          <p class="page-sub">
+            Your doctor sees this at the top of every summary and PDF, so you never repeat it at the clinic.
+          </p>
         </div>
 
-        <div id="next-reminder-banner" class="next-reminder-banner hidden">
-          <span class="next-rem-icon">
-            <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
-          </span>
-          <div>
-            <p class="next-rem-kicker">Next reminder</p>
-            <p class="next-rem-title" id="next-reminder-text">No upcoming reminders</p>
-          </div>
-        </div>
-
-        <form id="reminder-form" class="panel stack hidden">
-          <div class="panel-head">
-            <h3 class="panel-title">Add prescribed medicine</h3>
-            <p class="panel-sub">Add reminders exactly as your doctor prescribed. VoiceCare never suggests medicines.</p>
-          </div>
-          <div class="field">
-            <label class="field-label" for="rem-name">Medicine name</label>
-            <input id="rem-name" class="input" type="text" maxlength="100" placeholder="e.g. Metformin 500 mg" required />
-          </div>
-          <div class="field-grid">
+        <form id="profile-form" class="stack" novalidate>
+          <section class="panel stack">
             <div class="field">
-              <label class="field-label" for="rem-time">Time</label>
-              <input id="rem-time" class="input" type="time" value="08:00" required />
+              <label class="field-label" for="profile-name">Full name</label>
+              <input id="profile-name" class="input" type="text" maxlength="80" placeholder="e.g. Lakshmi Devi" autocomplete="name" />
+            </div>
+            <div class="field-grid">
+              <div class="field">
+                <label class="field-label" for="profile-age">Age</label>
+                <input id="profile-age" class="input" type="number" min="0" max="120" inputmode="numeric" placeholder="e.g. 54" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="profile-gender">Gender</label>
+                <select id="profile-gender" class="select">
+                  <option value="">Not stated</option>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
             <div class="field">
-              <label class="field-label" for="rem-timing-tag">With meals</label>
-              <select id="rem-timing-tag" class="select">
-                <option value="After breakfast">After breakfast</option>
-                <option value="Before breakfast">Before breakfast</option>
-                <option value="After lunch">After lunch</option>
-                <option value="With snack">With snack</option>
-                <option value="After dinner">After dinner</option>
-                <option value="Bedtime">Bedtime</option>
+              <label class="field-label" for="profile-blood">Blood group</label>
+              <select id="profile-blood" class="select">
+                <option value="">Not known</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
               </select>
             </div>
-          </div>
-          <div class="field">
-            <label class="field-label" for="rem-note">Doctor's note <span class="optional">optional</span></label>
-            <input id="rem-note" class="input" type="text" maxlength="120" placeholder="e.g. 1 tablet · Diabetes" />
-          </div>
-          <button class="btn btn-primary" type="submit">
-            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
-            Add reminder
-          </button>
+            <div class="field">
+              <label class="field-label" for="profile-allergies">Allergies <span class="optional">optional</span></label>
+              <textarea id="profile-allergies" class="textarea" rows="2" maxlength="200" placeholder="e.g. Penicillin, peanuts. Write None if you have no allergies."></textarea>
+              <p class="panel-sub">Write it exactly as your doctor told you. VoiceCare never adds an allergy.</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="profile-emergency">Emergency contact <span class="optional">optional</span></label>
+              <input id="profile-emergency" class="input" type="tel" maxlength="20" inputmode="tel" placeholder="Family member's phone number" />
+            </div>
+          </section>
+
+          <button class="btn btn-primary" type="submit">Save my information</button>
         </form>
 
-        <div id="reminders-list"></div>
+        <p class="footnote">
+          Saved only on this phone. It is added to your summaries and PDFs, and to a QR link only when you choose to share one.
+        </p>
       </section>
 
-      <!-- 11 · HISTORY -->
       <section id="screen-history" class="screen" aria-label="Saved summaries">
         <div class="page-head">
           <h2 class="page-title">History</h2>
@@ -893,9 +984,9 @@
         <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg></span>
         <span id="nav-label-input">Speak</span>
       </button>
-      <button class="tab" data-screen="reminders" type="button">
-        <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-pill"></use></svg></span>
-        <span id="nav-label-reminders">Medicines</span>
+      <button class="tab" data-screen="profile" type="button">
+        <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg></span>
+        <span id="nav-label-profile">My info</span>
       </button>
       <button class="tab" data-screen="history" type="button">
         <span class="tab-icon-pill"><svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg></span>
@@ -912,6 +1003,7 @@
 
   <!-- Scripts -->
   <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/qrcode.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/storage.js"></script>
@@ -919,7 +1011,7 @@
   <script src="js/api.js"></script>
   <script src="js/voice.js"></script>
   <script src="js/pdf.js"></script>
-  <script src="js/notifications.js"></script>
+  <script src="js/share.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

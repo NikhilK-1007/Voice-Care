@@ -25,6 +25,9 @@ window.VOICECARE_VOICE = (() => {
   let guardId = null;
   let busy = false;
   let bound = false;
+  // Which text field the transcript goes into. The main description box by
+  // default; follow-up answers switch it to their own field.
+  let targetId = 'patient-input-box';
 
   function $(id) {
     return document.getElementById(id);
@@ -52,11 +55,23 @@ window.VOICECARE_VOICE = (() => {
     };
   }
 
+  function statusElementId() {
+    return targetId === 'patient-input-box' ? 'voice-status' : 'followup-status';
+  }
+
   function setStatus(text, isError = false) {
-    const status = $('voice-status');
+    const status = $(statusElementId());
     if (!status) return;
     status.textContent = text || '';
     status.classList.toggle('is-error', Boolean(isError));
+  }
+
+  /**
+   * Points the recorder at a different text field (follow-up answers).
+   * @param {string} [inputId]
+   */
+  function setTarget(inputId) {
+    targetId = inputId || 'patient-input-box';
   }
 
   function setBusy(value) {
@@ -118,7 +133,7 @@ window.VOICECARE_VOICE = (() => {
   }
 
   function appendTranscript(text) {
-    const box = $('patient-input-box');
+    const box = $(targetId);
     if (!box) return;
     const existing = box.value.trim();
     box.value = existing ? `${existing} ${text}` : text;
@@ -314,6 +329,7 @@ window.VOICECARE_VOICE = (() => {
     start,
     stop,
     abort,
+    setTarget,
     refreshLabels,
     isRecording: () => Boolean(recorder),
     isBusy: () => busy

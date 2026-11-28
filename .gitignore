@@ -1,14 +1,21 @@
+# dependencies
 node_modules/
+# secrets
 backend/.env
+.env
+# build output
 dist/
 frontend/android/build/
 frontend/android/app/build/
-.gradle/
 frontend/android/.gradle/
-frontend/android/local.properties
-frontend/android/app/google-services.json
-frontend/ios/
-.cloud-attachments/
-.freebuff/
+frontend/android/app/src/main/assets/public/
+frontend/www/vendor/../*.map
+# runtime data (24h share links, logs)
+backend/.data/
+backend/.tmp-server.log
 *.log
+# OS / editor
 .DS_Store
+Thumbs.db
+.vscode/
+.idea/

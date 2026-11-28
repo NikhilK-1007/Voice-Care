@@ -44,7 +44,7 @@ window.VOICECARE_I18N = {
       'For doctor communication only — not a medical diagnosis or prescription.',
     navHome: 'Home',
     navDescribe: 'Speak',
-    navReminders: 'Medicines',
+    navProfile: 'My info',
     navHistory: 'History',
     navAbout: 'Settings'
   },
@@ -85,7 +85,7 @@ window.VOICECARE_I18N = {
       'केवल डॉक्टर से बातचीत में मदद के लिए — यह कोई मेडिकल निदान या प्रिस्क्रिप्शन नहीं है।',
     navHome: 'होम',
     navDescribe: 'बोलें',
-    navReminders: 'दवाइयाँ',
+    navProfile: 'मेरी जानकारी',
     navHistory: 'इतिहास',
     navAbout: 'सेटिंग्स'
   },
@@ -126,7 +126,7 @@ window.VOICECARE_I18N = {
       'ವೈದ್ಯರೊಂದಿಗೆ ಸಂವಹನಕ್ಕಾಗಿ ಮಾತ್ರ — ಇದು ವೈದ್ಯಕೀಯ ರೋಗನಿರ್ಣಯವಲ್ಲ.',
     navHome: 'ಮುಖಪುಟ',
     navDescribe: 'ಮಾತನಾಡಿ',
-    navReminders: 'ಔಷಧಿಗಳು',
+    navProfile: 'ನನ್ನ ಮಾಹಿತಿ',
     navHistory: 'ಇತಿಹಾಸ',
     navAbout: 'ಸೆಟ್ಟಿಂಗ್ಸ್'
   }

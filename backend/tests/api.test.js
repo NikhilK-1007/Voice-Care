@@ -6,6 +6,8 @@ const {
   validatePatientInput,
   detectEmergencyWarning,
   enforceSummarySchema,
+  filterUrgentFlags,
+  enforceFollowUpSchema,
   NOT_MENTIONED
 } = require('../services/safetyValidator');
 const app = require('../server');
@@ -28,6 +30,43 @@ test('detectEmergencyWarning flags red-flag phrases across languages', () => {
   assert.equal(detectEmergencyWarning('मुझे सीने में दर्द हो रहा है').detected, true);
   assert.equal(detectEmergencyWarning('ನನಗೆ ಎದೆ ನೋವು ಇದೆ').detected, true);
   assert.equal(detectEmergencyWarning('Mild headache since morning').detected, false);
+});
+
+test('filterUrgentFlags only keeps phrases the patient actually said', () => {
+  const text = 'I have pain in my chest since morning and I take metformin.';
+
+  // Quoted exactly → kept.
+  assert.deepEqual(filterUrgentFlags(['chest pain'], text), ['chest pain']);
+  // Every meaningful word appears in the description → kept.
+  assert.equal(filterUrgentFlags(['pain in my chest'], text).length, 1);
+  // Invented red flags are dropped.
+  assert.deepEqual(filterUrgentFlags(['heavy bleeding', 'cannot breathe'], text), []);
+  // Non-string junk is ignored instead of crashing.
+  assert.deepEqual(filterUrgentFlags([null, 42, {}], text), []);
+  // Native-script quote is kept only when it is in the patient's words.
+  assert.deepEqual(filterUrgentFlags(['सीने में दर्द'], 'मुझे सीने में दर्द है'), ['सीने में दर्द']);
+  assert.deepEqual(filterUrgentFlags(['सीने में दर्द'], 'मुझे बुखार है'), []);
+  // At most 6 flags are returned.
+  const long = 'chest pain, cannot breathe, fainting, seizure, heavy bleeding, stroke, unconscious';
+  assert.ok(filterUrgentFlags(long.split(',').map((s) => s.trim()), long).length <= 6);
+});
+
+test('enforceFollowUpSchema caps questions at 3 and strips junk', () => {
+  const result = enforceFollowUpSchema({
+    missing_info: ['duration', 'severity', 'duration', 42, 'current medicines'],
+    follow_up_questions: [
+      { question: 'For how many days?' },
+      'Is it mild or severe?',
+      '  ',
+      'Which medicines do you take?',
+      'A fourth question that must be dropped?'
+    ]
+  });
+
+  assert.ok(result.followUpQuestions.length <= 3);
+  assert.equal(result.followUpQuestions[0], 'For how many days?');
+  assert.ok(result.missingInfo.includes('duration'));
+  assert.ok(!result.missingInfo.includes(42));
 });
 
 test('enforceSummarySchema populates all 8 sections without inventing missing info', () => {
@@ -151,6 +190,94 @@ test('HTTP API /api/health and /api/summarize work end-to-end in demo fallback m
     const hiJson = await hiRes.json();
     assert.equal(/[\u0900-\u097F]/.test(hiJson.data.summary.duration), false);
     assert.equal(/[\u0900-\u097F]/.test(hiJson.data.summary.mainHealthConcern), false);
+
+    // New Phase 1 contract: every summary carries an English version, a
+    // verified urgency list and the missing-detail metadata.
+    assert.ok(sumJson.data.englishSummary, 'englishSummary is returned');
+    assert.ok(Array.isArray(sumJson.data.urgentFlags), 'urgentFlags is an array');
+    assert.ok(Array.isArray(sumJson.data.missingInfo), 'missingInfo is an array');
+    assert.equal(sumJson.data.urgentFlags.length, 0, 'no invented urgency flags');
+
+    // A real red flag the patient said is repeated back, and only that one.
+    const urgentRes = await fetch(`${baseUrl}/api/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patientText: 'I have severe chest pain since this morning and I feel dizzy.',
+        language: 'en'
+      })
+    });
+    assert.equal(urgentRes.status, 200);
+    const urgentJson = await urgentRes.json();
+    assert.ok(urgentJson.data.urgentFlags.length >= 1, 'chest pain is flagged');
+    assert.equal(urgentJson.data.metadata.emergencyWarning.detected, true);
+    assert.match(urgentJson.data.metadata.emergencyWarning.guidance, /108/);
+
+    // Follow-up questions never need Gemini to work.
+    const followRes = await fetch(`${baseUrl}/api/follow-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientText: 'I have fever.', language: 'en' })
+    });
+    assert.equal(followRes.status, 200);
+    const followJson = await followRes.json();
+    assert.equal(followJson.success, true);
+    assert.ok(followJson.data.followUpQuestions.length <= 3, 'at most 3 questions');
+    assert.ok(followJson.data.followUpQuestions.length >= 1);
+    assert.equal(followJson.data.source, 'local-rules');
+
+    // Follow-up answers are optional input for the summary request.
+    const answeredRes = await fetch(`${baseUrl}/api/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patientText: 'I have fever.',
+        language: 'en',
+        followUpAnswers: [{ question: 'How long?', answer: 'For 3 days' }]
+      })
+    });
+    assert.equal(answeredRes.status, 200);
+
+    // QR share: create, open as a doctor, and reject an unknown token.
+    const shareRes = await fetch(`${baseUrl}/api/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patientText: 'I have chest pain since morning.',
+        languageLabel: 'English',
+        summary: urgentJson.data.summary,
+        englishSummary: urgentJson.data.englishSummary,
+        urgentFlags: urgentJson.data.urgentFlags,
+        missingInfo: urgentJson.data.missingInfo,
+        patient: { name: 'Test Patient', age: '54', bloodGroup: 'B+', allergies: 'Penicillin' }
+      })
+    });
+    assert.equal(shareRes.status, 200);
+    const shareJson = await shareRes.json();
+    assert.ok(shareJson.data.token, 'share token returned');
+    assert.match(shareJson.data.url, /\/s\//);
+    assert.ok(shareJson.data.expiresAt, 'expiry returned');
+
+    const sharePageRes = await fetch(`${baseUrl}/s/${shareJson.data.token}`);
+    assert.equal(sharePageRes.status, 200);
+    assert.match(sharePageRes.headers.get('content-type') || '', /text\/html/);
+    const shareHtml = await sharePageRes.text();
+    assert.ok(shareHtml.includes('Test Patient'));
+    assert.ok(shareHtml.includes('If this is an emergency, call 108.'));
+    assert.ok(!/<script/i.test(shareHtml), 'doctor page runs no scripts');
+
+    const shareApiRes = await fetch(`${baseUrl}/api/share/${shareJson.data.token}`);
+    assert.equal(shareApiRes.status, 200);
+
+    const missingShareRes = await fetch(`${baseUrl}/s/doesnotexist`);
+    assert.equal(missingShareRes.status, 404);
+
+    const emptyShareRes = await fetch(`${baseUrl}/api/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary: { mainHealthConcern: NOT_MENTIONED }, patientText: '' })
+    });
+    assert.equal(emptyShareRes.status, 400);
   } finally {
     server.close();
     if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;

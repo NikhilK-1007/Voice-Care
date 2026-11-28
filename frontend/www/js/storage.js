@@ -1,8 +1,8 @@
 /**
  * VoiceCare Local Storage Manager
  *
- * Persists user session, language preference, accessibility settings,
- * past health summaries, and medicine reminders cleanly on device.
+ * Persists user session, language preference, accessibility settings, the
+ * quick-info card, and past health summaries cleanly on device.
  */
 
 const KEYS = {
@@ -10,8 +10,7 @@ const KEYS = {
   LANGUAGE: 'voicecare_language',
   ACCESSIBILITY: 'voicecare_accessibility',
   HISTORY: 'voicecare_history',
-  REMINDERS: 'voicecare_reminders',
-  REMINDERS_META: 'voicecare_reminders_meta',
+  PROFILE: 'voicecare_quick_info',
   DRAFT_TEXT: 'voicecare_draft_text',
   ONBOARDED: 'voicecare_onboarded'
 };
@@ -50,9 +49,7 @@ window.VOICECARE_STORAGE = {
     if (localStorage.getItem(KEYS.ONBOARDED) === '1') return true;
     // Existing installs upgrading to this version shouldn't re-see first-install prompt
     const hasExistingData =
-      Boolean(safeRead(KEYS.USER, null)) ||
-      safeRead(KEYS.HISTORY, []).length > 0 ||
-      safeRead(KEYS.REMINDERS, []).length > 0;
+      Boolean(safeRead(KEYS.USER, null)) || safeRead(KEYS.HISTORY, []).length > 0;
     if (hasExistingData) {
       localStorage.setItem(KEYS.ONBOARDED, '1');
       return true;
@@ -134,32 +131,47 @@ window.VOICECARE_STORAGE = {
     return list;
   },
 
-  getReminders(uid) {
-    return safeRead(scopedKey(KEYS.REMINDERS, uid), []);
+  /**
+   * The quick-info card. Stored once and attached to every summary and PDF, so
+   * a doctor always sees the same name, age, blood group and allergy warning.
+   * @returns {{ name: string, age: string, gender: string, bloodGroup: string, allergies: string, emergencyContact: string }}
+   */
+  getProfile() {
+    const raw = safeRead(scopedKey(KEYS.PROFILE), null) || {};
+    return {
+      name: typeof raw.name === 'string' ? raw.name : '',
+      age: typeof raw.age === 'string' ? raw.age : '',
+      gender: typeof raw.gender === 'string' ? raw.gender : '',
+      bloodGroup: typeof raw.bloodGroup === 'string' ? raw.bloodGroup : '',
+      allergies: typeof raw.allergies === 'string' ? raw.allergies : '',
+      emergencyContact:
+        typeof raw.emergencyContact === 'string' ? raw.emergencyContact : ''
+    };
   },
-  saveReminders(reminders, uid) {
-    safeWrite(scopedKey(KEYS.REMINDERS, uid), Array.isArray(reminders) ? reminders : []);
+  hasProfile() {
+    const profile = window.VOICECARE_STORAGE.getProfile();
+    return Boolean(profile.name || profile.age || profile.bloodGroup || profile.allergies);
   },
-  getDeletedReminderIds(uid) {
-    return safeRead(scopedKey(KEYS.REMINDERS_META, uid), []);
-  },
-  saveDeletedReminderIds(ids, uid) {
-    safeWrite(scopedKey(KEYS.REMINDERS_META, uid), (Array.isArray(ids) ? ids : []).slice(0, 30));
-  },
-  recordDeletedReminderId(id, uid) {
-    if (!id) return [];
-    const current = safeRead(scopedKey(KEYS.REMINDERS_META, uid), []);
-    const next = [id, ...current.filter((x) => x !== id)].slice(0, 30);
-    safeWrite(scopedKey(KEYS.REMINDERS_META, uid), next);
-    return next;
+  saveProfile(profile) {
+    const clean = {
+      name: String(profile?.name || '').trim().slice(0, 80),
+      age: String(profile?.age || '').trim().slice(0, 3),
+      gender: String(profile?.gender || '').trim().slice(0, 20),
+      bloodGroup: String(profile?.bloodGroup || '').trim().slice(0, 8),
+      allergies: String(profile?.allergies || '').trim().slice(0, 200),
+      emergencyContact: String(profile?.emergencyContact || '').trim().slice(0, 20),
+      updatedAt: new Date().toISOString()
+    };
+    safeWrite(scopedKey(KEYS.PROFILE), clean);
+    return clean;
   },
 
   /**
-   * Moves local guest/pre-login history and reminders into a signed-in user's
-   * storage bucket so nothing recorded before signing in is lost on upgrade.
+   * Moves local guest/pre-login history into a signed-in user's storage bucket
+   * so nothing recorded before signing in is lost on upgrade.
    */
   adoptGuestDataForUser(uid) {
-    if (!uid || uid === 'guest-demo') return { adoptedHistory: 0, adoptedReminders: 0 };
+    if (!uid || uid === 'guest-demo') return { adoptedHistory: 0 };
 
     const guestHistory = safeRead(KEYS.HISTORY, []);
     let adoptedHistory = 0;
@@ -181,23 +193,13 @@ window.VOICECARE_STORAGE = {
       safeWrite(KEYS.HISTORY, []);
     }
 
-    const guestReminders = safeRead(KEYS.REMINDERS, []);
-    let adoptedReminders = 0;
-    if (guestReminders.length > 0) {
-      const userReminders = safeRead(scopedKey(KEYS.REMINDERS, uid), []);
-      const seenRem = new Set(userReminders.map((r) => r.id));
-      const mergedRem = [...userReminders];
-      for (const rem of guestReminders) {
-        if (rem?.id && !seenRem.has(rem.id)) {
-          mergedRem.push({ ...rem, updatedAt: rem.updatedAt || new Date().toISOString() });
-          seenRem.add(rem.id);
-          adoptedReminders += 1;
-        }
-      }
-      safeWrite(scopedKey(KEYS.REMINDERS, uid), mergedRem);
-      safeWrite(KEYS.REMINDERS, []);
+    // The quick-info card follows the account too, but never overwrites details
+    // the signed-in patient already saved.
+    const guestProfile = safeRead(KEYS.PROFILE, null);
+    if (guestProfile && !safeRead(scopedKey(KEYS.PROFILE, uid), null)) {
+      safeWrite(scopedKey(KEYS.PROFILE, uid), guestProfile);
     }
 
-    return { adoptedHistory, adoptedReminders };
+    return { adoptedHistory };
   }
 };

@@ -20,11 +20,31 @@ function sanitizeLanguage(raw) {
 }
 
 /**
+ * Turns the patient's answers to the follow-up questions into one clarification
+ * block for the model. Only answers the patient actually typed or dictated are
+ * included; a skipped question contributes nothing.
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function buildAnswersNote(raw) {
+  if (!Array.isArray(raw)) return '';
+  const lines = [];
+  for (const item of raw.slice(0, 3)) {
+    if (!item || typeof item !== 'object') continue;
+    const question = typeof item.question === 'string' ? item.question.trim().slice(0, 160) : '';
+    const answer = typeof item.answer === 'string' ? item.answer.trim().slice(0, 300) : '';
+    if (!answer) continue;
+    lines.push(question ? `Q: ${question}\nA: ${answer}` : answer);
+  }
+  return lines.join('\n');
+}
+
+/**
  * Shared handler for generating or regenerating a structured health summary.
  */
 async function handleSummarize(req, res) {
   try {
-    const { patientText, language = 'en', extraNotes = '' } = req.body || {};
+    const { patientText, language = 'en', extraNotes = '', followUpAnswers } = req.body || {};
 
     const validation = validatePatientInput(patientText);
     if (!validation.valid) {
@@ -35,8 +55,14 @@ async function handleSummarize(req, res) {
     }
 
     const safeLanguage = sanitizeLanguage(language);
-    const safeExtraNotes =
-      typeof extraNotes === 'string' ? extraNotes.trim().slice(0, 1000) : '';
+    const answersNote = buildAnswersNote(followUpAnswers);
+    const safeExtraNotes = [
+      typeof extraNotes === 'string' ? extraNotes.trim().slice(0, 1000) : '',
+      answersNote
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 1400);
 
     const result = await generateHealthSummary({
       patientText: validation.text,

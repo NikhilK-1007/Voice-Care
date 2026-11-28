@@ -1698,3 +1698,158 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   .sheet { border: none; padding: 0; box-shadow: none; }
   .record-card { break-inside: avoid; box-shadow: none; }
 }
+
+/* ---------- Phase 1: quick-info card, follow-up questions, urgency, QR ---------- */
+
+.quickinfo-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.summary-toggle {
+  margin: 0 0 12px;
+}
+
+.summary-dual {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .summary-dual {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.summary-lang-block {
+  min-width: 0;
+}
+
+.summary-lang-label {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.summary-lang-english {
+  border-top: 2px dashed #e2e8f0;
+  padding-top: 10px;
+}
+
+@media (min-width: 720px) {
+  .summary-lang-english {
+    border-top: none;
+    border-left: 2px dashed #e2e8f0;
+    padding-top: 0;
+    padding-left: 12px;
+  }
+}
+
+.original-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #1e293b;
+}
+
+.urgent-flag-list {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+  font-weight: 700;
+}
+
+.urgent-flag-list li {
+  margin-bottom: 4px;
+}
+
+.urgent-explainer {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.urgent-call-line {
+  margin: 0 0 10px;
+  font-weight: 800;
+}
+
+.followup-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.followup-card.is-skipped {
+  opacity: 0.55;
+}
+
+.followup-question {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.followup-number {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0f766e;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.qr-panel {
+  text-align: center;
+}
+
+.qr-canvas {
+  width: 220px;
+  height: 220px;
+  max-width: 78vw;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px;
+  margin: 4px auto 10px;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.share-link {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #0f766e;
+  word-break: break-all;
+}
+
+.section-meta {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: #64748b;
+}

@@ -73,7 +73,7 @@ window.VOICECARE_API = {
         }),
         signal
       },
-      55000
+      65000
     );
 
     const json = await res.json().catch(() => ({}));
@@ -81,6 +81,34 @@ window.VOICECARE_API = {
       throw new Error(json.error || 'Could not reach VoiceCare AI backend. Please check that the server is running.');
     }
 
+    return json.data;
+  },
+
+  /**
+   * Asks the backend which details are missing, so the app can ask up to three
+   * short follow-up questions before writing the summary.
+   * Resolves to { missingInfo: string[], followUpQuestions: string[], source }.
+   */
+  async getFollowUpQuestions({ patientText, language, signal }) {
+    const baseUrl = window.VOICECARE_CONFIG.getApiBaseUrl();
+    const res = await this.fetchWithTimeout(
+      `${baseUrl}/api/follow-up`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({ patientText, language }),
+        signal
+      },
+      25000
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Could not prepare follow-up questions.');
+    }
     return json.data;
   },
 

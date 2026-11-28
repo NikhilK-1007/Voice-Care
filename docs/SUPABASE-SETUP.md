@@ -22,6 +22,12 @@ The old snippet was missing:
 | `with check` on update | A row could be re-pointed at another user id |
 | index on `(user_id, updated_at desc)` | Slow load as history grows |
 
+If the policies list shows **two sets** (for example `Users read own summaries` next to
+`summaries_select_own`), the migration was run but the older policies had different names.
+`supabase/schema.sql` drops every existing policy by looping over `pg_policies`, so re-running
+it leaves exactly four. Postgres ORs multiple permissive policies, so duplicates do not break
+saving — but the old UPDATE policy has no `with check`, which is worth removing.
+
 ## 1. Open the SQL editor
 
 1. Go to <https://supabase.com/dashboard> and open the VoiceCare project

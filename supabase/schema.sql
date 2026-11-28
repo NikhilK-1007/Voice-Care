@@ -75,33 +75,39 @@ create index if not exists summaries_user_updated_idx
 --    This is what makes the public anon key in the app safe.
 alter table public.summaries enable row level security;
 
--- Remove the policies created by the older, incomplete SQL, so there is exactly
--- one policy per command (and DELETE is actually allowed).
-drop policy if exists "Users can insert their own summaries" on public.summaries;
-drop policy if exists "Users can view their own summaries" on public.summaries;
-drop policy if exists "Users can update their own summaries" on public.summaries;
-drop policy if exists "Users can delete their own summaries" on public.summaries;
+-- Remove EVERY policy on this table first. Old projects contain policies with
+-- many different names ("Users can insert their own summaries"
+-- "Users read own summaries", …); Postgres allows several permissive policies
+-- per command and ORs them, so leftovers silently weaken the rules. Dropping by
+-- name is not enough, so this loops over whatever is actually there.
+do $$
+declare
+  pol record;
+begin
+  for pol in
+    select policyname from pg_policies
+     where schemaname = 'public' and tablename = 'summaries'
+  loop
+    execute format('drop policy %I on public.summaries', pol.policyname);
+  end loop;
+end $$;
 
-drop policy if exists "summaries_select_own" on public.summaries;
 create policy "summaries_select_own"
   on public.summaries for select
   to authenticated
   using (auth.uid() = user_id);
 
-drop policy if exists "summaries_insert_own" on public.summaries;
 create policy "summaries_insert_own"
   on public.summaries for insert
   to authenticated
   with check (auth.uid() = user_id);
 
-drop policy if exists "summaries_update_own" on public.summaries;
 create policy "summaries_update_own"
   on public.summaries for update
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-drop policy if exists "summaries_delete_own" on public.summaries;
 create policy "summaries_delete_own"
   on public.summaries for delete
   to authenticated

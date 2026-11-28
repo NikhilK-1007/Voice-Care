@@ -19,6 +19,9 @@
     profile: { title: 'My Information', topbar: false, bottomNav: true },
     followup: { title: 'Follow-up Questions', topbar: false, bottomNav: false },
     history: { title: 'Patient History', topbar: false, bottomNav: true },
+    doctor: { title: 'Doctor view', topbar: true, bottomNav: true },
+    notes: { title: 'Visit notes', topbar: true, bottomNav: false },
+    timeline: { title: 'Visit timeline', topbar: true, bottomNav: true },
     about: { title: 'Safety & Accessibility', topbar: false, bottomNav: true }
   };
 
@@ -39,7 +42,9 @@
     // the patient gave (skipped questions contribute nothing).
     pendingPatientText: '',
     pendingFollowUpAnswers: [],
-    followUpQuestions: []
+    followUpQuestions: [],
+    // Visit notes / photos are edited against one saved visit at a time.
+    notesEntryId: null
   };
 
   // DOM helpers
@@ -223,6 +228,17 @@
       renderHistory();
       maybeAutoSync();
     }
+    if (screenName === 'doctor') {
+      renderDoctorView();
+      maybeAutoSync();
+    }
+    if (screenName === 'timeline') {
+      renderTimeline();
+      maybeAutoSync();
+    }
+    if (screenName === 'notes') {
+      renderNotesScreen();
+    }
     if (screenName === 'about') {
       updateSyncStatusUi();
     }
@@ -241,6 +257,19 @@
       ? quickInfoLine(profile)
       : 'Add name, age, blood group';
     $('home-history-count').textContent = `${history.length} saved visit${history.length === 1 ? '' : 's'}`;
+
+    const reviewed = history.filter((item) => item.reviewedAt).length;
+    const doctorCount = $('home-doctor-count');
+    if (doctorCount) {
+      doctorCount.textContent = `${history.length} visit${history.length === 1 ? '' : 's'} · ${reviewed} reviewed`;
+    }
+    const timelineMeta = $('home-timeline-meta');
+    if (timelineMeta) {
+      const withNotes = history.filter((item) => item.doctorNote || item.prescribedMeds).length;
+      timelineMeta.textContent = history.length
+        ? `${withNotes} visit note${withNotes === 1 ? '' : 's'} saved`
+        : 'Your health over time';
+    }
   }
 
   /** One-line patient identity used on the home tile, summary and PDF. */
@@ -327,10 +356,28 @@
         ? `Organised with Gemini AI${meta.model ? ` · ${meta.model}` : ''}`
         : `Basic local extractor used — the AI model was unavailable. Tap Regenerate to try again.`;
 
+    // The English pane is what a doctor who does not read the patient's language
+    // relies on. Show a clear notice instead of quietly repeating the native text.
+    const englishReady =
+      Boolean(entry.englishSummary) && entry.metadata?.englishIsGenerated !== false;
+
     $('summary-sections-container').innerHTML = buildSummarySectionHtml(entry.summary || {});
-    $('summary-english-container').innerHTML = buildSummarySectionHtml(
-      entry.englishSummary || entry.summary || {}
-    );
+    $('summary-english-container').innerHTML = englishReady
+      ? buildSummarySectionHtml(entry.englishSummary)
+      : `<div class="alert alert-warning" style="display: block;">
+           <p class="alert-title">English version not ready</p>
+           <p>The AI could not translate this summary yet. Tap <strong>Regenerate</strong> to try again, or use Share PDF to hand over your exact words.</p>
+         </div>`;
+
+    // Put English first whenever the patient did not speak English: that is the
+    // version the doctor needs to read.
+    const pane = $('summary-ai-pane');
+    const nativeBlock = $('summary-native-block');
+    const englishBlock = pane?.querySelector('.summary-lang-english');
+    if (pane && nativeBlock && englishBlock) {
+      if ((entry.language || 'en') !== 'en') pane.insertBefore(englishBlock, nativeBlock);
+      else pane.insertBefore(nativeBlock, englishBlock);
+    }
 
     renderQuickInfoStrip(entry);
     renderOriginalWords(entry);
@@ -612,6 +659,17 @@
         window.VOICECARE_STORAGE.adoptGuestDataForUser(user.uid);
       }
 
+      // The quick-info card follows the account, but only fills a blank card:
+      // details already saved on this phone always win.
+      const cloudProfile = await window.VOICECARE_SUPABASE.loadCloudProfile?.(user)?.catch(() => null);
+      if (cloudProfile?.ok && cloudProfile.profile) {
+        const localProfile = window.VOICECARE_STORAGE.getProfile();
+        const hasLocal = Boolean(
+          localProfile.name || localProfile.age || localProfile.bloodGroup || localProfile.allergies
+        );
+        if (!hasLocal) window.VOICECARE_STORAGE.saveProfile(cloudProfile.profile);
+      }
+
       // Immediately reflect any locally adopted summaries/reminders before network returns
       if (state.currentScreen === 'home') renderHomeStats();
       if (state.currentScreen === 'history') renderHistory();
@@ -631,7 +689,15 @@
       }
 
       if (sumRes.ok) {
-        const cloudSummaries = sumRes.items;
+        // A visit deleted on this phone must not come back from the cloud.
+        const deletedIds = window.VOICECARE_STORAGE.getDeletedIds();
+        const deletedSet = new Set(deletedIds);
+        for (const id of deletedIds) {
+          window.VOICECARE_SUPABASE.deleteCloudSummary?.(user, id);
+        }
+        if (deletedIds.length) window.VOICECARE_STORAGE.clearDeletedIds();
+
+        const cloudSummaries = sumRes.items.filter((c) => c?.id && !deletedSet.has(c.id));
         const localList = window.VOICECARE_STORAGE.getHistory(user.uid);
         const cloudMap = new Map(cloudSummaries.map((c) => [c.id, c]));
         const mergedMap = new Map();
@@ -640,19 +706,21 @@
           mergedMap.set(c.id, { ...c, synced: true });
         }
 
+        // A visit that exists only on this phone is kept and re-uploaded. It is
+        // never dropped just because the cloud copy is missing.
         const unsyncedToUpload = [];
         for (const l of localList) {
-          if (!l || !l.id) continue;
+          if (!l || !l.id || deletedSet.has(l.id)) continue;
           const c = cloudMap.get(l.id);
-          if (c) {
-            const lTime = String(l.updatedAt || l.createdAt || '');
-            const cTime = String(c.updatedAt || c.createdAt || '');
-            if (lTime > cTime && l.synced !== true) {
-              mergedMap.set(l.id, l);
-              unsyncedToUpload.push(l);
-            }
-          } else if (l.synced !== true) {
-            mergedMap.set(l.id, l);
+          if (!c) {
+            mergedMap.set(l.id, { ...l, synced: false });
+            unsyncedToUpload.push(l);
+            continue;
+          }
+          const lTime = String(l.updatedAt || l.createdAt || '');
+          const cTime = String(c.updatedAt || c.createdAt || '');
+          if (lTime > cTime) {
+            mergedMap.set(l.id, { ...l, synced: false });
             unsyncedToUpload.push(l);
           }
         }
@@ -769,6 +837,250 @@
         showToast('Saved summary deleted.');
       });
     });
+  }
+
+  function formatEntryDate(entry) {
+    return new Date(entry?.updatedAt || entry?.createdAt || Date.now()).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  }
+
+  /**
+   * Applies a change to one saved visit: local storage first (instant, works
+   * offline), then the cloud copy in the background.
+   */
+  function updateEntry(id, patch) {
+    const entry = window.VOICECARE_STORAGE.getHistory().find((item) => item.id === id);
+    if (!entry) return null;
+    const updated = { ...entry, ...patch, synced: false, updatedAt: new Date().toISOString() };
+    window.VOICECARE_STORAGE.saveHistoryEntry(updated);
+    if (state.currentEntry?.id === id) state.currentEntry = updated;
+    persistEntryToCloud(updated);
+    return updated;
+  }
+
+  /** Doctor view: one card per visit, with review state and visit notes. */
+  function renderDoctorView() {
+    const container = $('doctor-list');
+    if (!container) return;
+    const list = window.VOICECARE_STORAGE.getHistory();
+
+    if (!list.length) {
+      container.innerHTML = `<div class="empty-state">No visits yet. Describe a health concern and the summary will appear here for your doctor.</div>`;
+      return;
+    }
+
+    container.innerHTML = list
+      .map((entry) => {
+        // The name is already the card title, so the meta line only adds the rest.
+        const info = entry.quickInfo || window.VOICECARE_STORAGE.getProfile();
+        const quick = [
+          info.age ? `${info.age} yrs` : '',
+          info.gender || '',
+          info.bloodGroup ? `Blood group ${info.bloodGroup}` : '',
+          info.allergies ? `Allergies: ${info.allergies}` : ''
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        const flags = (Array.isArray(entry.urgentFlags) ? entry.urgentFlags : []).filter(Boolean).slice(0, 4);
+        const photos = window.VOICECARE_STORAGE.getPhotos(entry.id);
+        const reviewed = Boolean(entry.reviewedAt);
+        return `
+          <article class="doctor-card${reviewed ? ' is-reviewed' : ''}">
+            <div class="doctor-card-head">
+              <div>
+                <p class="doctor-name">${escapeHtml((entry.quickInfo?.name || entry.patientName) || 'Patient')}</p>
+                <p class="doctor-meta">${escapeHtml(quick || 'Quick-Info Card not filled')}</p>
+              </div>
+              <span class="badge${reviewed ? ' badge-ok' : ''}">${reviewed ? 'Reviewed' : 'New'}</span>
+            </div>
+            <p class="doctor-concern">${escapeHtml(entry.summary?.mainHealthConcern || 'Health summary')}</p>
+            <p class="doctor-meta">${escapeHtml(formatEntryDate(entry))} · ${escapeHtml(entry.languageLabel || 'English')}</p>
+            ${flags.length ? `<ul class="urgent-flag-list">${flags.map((flag) => `<li>${escapeHtml(flag)}</li>`).join('')}</ul>` : ''}
+            ${entry.doctorNote ? `<p class="doctor-note"><strong>Doctor's note:</strong> ${escapeHtml(entry.doctorNote)}</p>` : ''}
+            ${entry.prescribedMeds ? `<p class="doctor-note"><strong>Medicines:</strong> ${escapeHtml(entry.prescribedMeds)}</p>` : ''}
+            ${entry.nextVisitAt ? `<p class="doctor-meta">Next visit: ${escapeHtml(entry.nextVisitAt)}</p>` : ''}
+            ${photos.length ? `<div class="photo-strip">${photos.map((photo) => `<img class="photo-thumb-sm" src="${escapeHtml(photo.dataUrl)}" alt="Attached report photo" />`).join('')}</div>` : ''}
+            <div class="item-actions">
+              <button class="btn btn-secondary btn-sm" data-doctor-open="${escapeHtml(entry.id)}" type="button">Open summary</button>
+              <button class="btn btn-quiet btn-sm" data-doctor-notes="${escapeHtml(entry.id)}" type="button">Visit notes</button>
+              <button class="btn ${reviewed ? 'btn-quiet' : 'btn-primary'} btn-sm" data-doctor-review="${escapeHtml(entry.id)}" type="button">${reviewed ? 'Reviewed ✓' : 'Mark reviewed'}</button>
+            </div>
+          </article>`;
+      })
+      .join('');
+  }
+
+  function toggleReviewed(id) {
+    const entry = window.VOICECARE_STORAGE.getHistory().find((item) => item.id === id);
+    if (!entry) return;
+    const reviewed = !entry.reviewedAt;
+    updateEntry(id, { reviewedAt: reviewed ? new Date().toISOString() : null });
+    renderDoctorView();
+    renderHomeStats();
+    showToast(reviewed ? 'Marked as reviewed.' : 'Marked as not reviewed.');
+  }
+
+  function openNotesScreen(entryId) {
+    const entry = window.VOICECARE_STORAGE.getHistory().find((item) => item.id === entryId);
+    if (!entry) {
+      showToast('That visit could not be found.');
+      return;
+    }
+    state.notesEntryId = entryId;
+    renderNotesScreen();
+    navigate('notes');
+  }
+
+  function renderNotesScreen() {
+    const entry = window.VOICECARE_STORAGE.getHistory().find((item) => item.id === state.notesEntryId);
+    if (!entry) return;
+    $('notes-subtitle').textContent = `${entry.summary?.mainHealthConcern || 'This visit'} · ${formatEntryDate(entry)}`;
+    $('note-doctor-said').value = entry.doctorNote || '';
+    $('note-medicines').value = entry.prescribedMeds || '';
+    $('note-next-visit').value = String(entry.nextVisitAt || '').slice(0, 10);
+    renderPhotos();
+  }
+
+  function renderPhotos() {
+    const grid = $('note-photos');
+    if (!grid) return;
+    const photos = window.VOICECARE_STORAGE.getPhotos(state.notesEntryId);
+    if (!photos.length) {
+      grid.innerHTML = '<p class="panel-sub" style="grid-column: 1 / -1;">No photos added yet.</p>';
+      return;
+    }
+    grid.innerHTML = photos
+      .map(
+        (photo) => `
+        <figure class="photo-item">
+          <img class="photo-thumb" src="${escapeHtml(photo.dataUrl)}" alt="Attached report photo" />
+          <button class="photo-remove" type="button" data-photo-remove="${escapeHtml(photo.id)}" aria-label="Remove photo">×</button>
+        </figure>`
+      )
+      .join('');
+  }
+
+  /**
+   * Shrinks a camera photo to a small JPEG before it is stored on the phone.
+   * Full-size 4 MB photos would fill the app's storage after two pictures.
+   */
+  function shrinkImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read that photo.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('That photo format is not supported on this phone.'));
+        img.onload = () => {
+          try {
+            const maxSide = 900;
+            const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          } catch {
+            reject(new Error('Could not prepare that photo.'));
+          }
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function addPhotos(files) {
+    const entryId = state.notesEntryId;
+    if (!entryId) return;
+    const existing = window.VOICECARE_STORAGE.getPhotos(entryId);
+    const room = 4 - existing.length;
+    if (room <= 0) {
+      showToast('You can keep up to 4 photos per visit.');
+      return;
+    }
+    const picked = Array.from(files || []).slice(0, room);
+    if (!picked.length) return;
+
+    const added = [];
+    for (const [index, file] of picked.entries()) {
+      if (!String(file.type || '').startsWith('image/')) continue;
+      try {
+        const dataUrl = await shrinkImage(file);
+        added.push({ id: `ph_${Date.now()}_${index}`, dataUrl, addedAt: new Date().toISOString() });
+      } catch (err) {
+        showToast(err.message || 'Could not add that photo.');
+      }
+    }
+
+    if (added.length) {
+      window.VOICECARE_STORAGE.savePhotos(entryId, [...existing, ...added]);
+      updateEntry(entryId, { photosCount: window.VOICECARE_STORAGE.countPhotos(entryId) });
+      renderPhotos();
+      showToast(`${added.length} photo${added.length === 1 ? '' : 's'} attached.`);
+    }
+  }
+
+  /** Timeline: every visit grouped by month, oldest month last. */
+  function renderTimeline() {
+    const container = $('timeline-list');
+    if (!container) return;
+    const list = window.VOICECARE_STORAGE.getHistory();
+
+    if (!list.length) {
+      container.innerHTML = `<div class="empty-state">No visits yet. Describe your first health concern to start your timeline.</div>`;
+      return;
+    }
+
+    const groups = [];
+    const byMonth = new Map();
+    for (const entry of list) {
+      const date = new Date(entry.updatedAt || entry.createdAt || Date.now());
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!byMonth.has(key)) {
+        const group = {
+          key,
+          label: date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+          items: []
+        };
+        byMonth.set(key, group);
+        groups.push(group);
+      }
+      byMonth.get(key).items.push(entry);
+    }
+
+    container.innerHTML = groups
+      .map(
+        (group) => `
+        <section class="timeline-group">
+          <p class="timeline-month">${escapeHtml(group.label)}</p>
+          <ul class="timeline-items">
+            ${group.items
+              .map(
+                (entry) => `
+              <li class="timeline-item">
+                <span class="timeline-dot${entry.reviewedAt ? ' is-reviewed' : ''}" aria-hidden="true"></span>
+                <button class="timeline-card" type="button" data-timeline-open="${escapeHtml(entry.id)}">
+                  <span class="timeline-date">${escapeHtml(formatEntryDate(entry))}</span>
+                  <span class="timeline-title">${escapeHtml(entry.summary?.mainHealthConcern || 'Health summary')}</span>
+                  <span class="timeline-meta">${escapeHtml(entry.languageLabel || 'English')}${entry.reviewedAt ? ' · Reviewed' : ''}${(entry.urgentFlags || []).length ? ' · Urgent words' : ''}</span>
+                </button>
+              </li>`
+              )
+              .join('')}
+          </ul>
+        </section>`
+      )
+      .join('');
+  }
+
+  function updateOfflineBanner() {
+    const banner = $('offline-banner');
+    if (!banner) return;
+    banner.classList.toggle('hidden', navigator.onLine !== false);
   }
 
   /**
@@ -1253,6 +1565,8 @@
     $('tile-language').addEventListener('click', () => navigate('language'));
     $('tile-profile').addEventListener('click', () => navigate('profile'));
     $('tile-history').addEventListener('click', () => navigate('history'));
+    $('tile-doctor').addEventListener('click', () => navigate('doctor'));
+    $('tile-timeline').addEventListener('click', () => navigate('timeline'));
     $('tile-about').addEventListener('click', () => navigate('about'));
 
     // 4. Language Selection
@@ -1315,6 +1629,14 @@
         inputBox.focus();
         return;
       }
+      // Offline: keep the words safe and explain instead of failing silently.
+      if (navigator.onLine === false) {
+        window.VOICECARE_STORAGE.setDraftText(text);
+        updateOfflineBanner();
+        showToast('You are offline. Your description is saved as a draft — tap Generate again when the internet returns.');
+        return;
+      }
+
       state.currentEntry = null;
       startFollowUpStep(text);
     });
@@ -1350,6 +1672,11 @@
       });
       renderHomeStats();
       if (state.currentEntry && state.currentScreen === 'summary') renderSummaryScreen();
+      // The card is account data, so keep a copy in Supabase too (never inside
+      // a summary); a new phone fills its blank card from there.
+      if (state.user?.mode === 'supabase') {
+        window.VOICECARE_SUPABASE?.syncProfileToCloud?.(state.user, profile)?.catch?.(() => {});
+      }
       showToast(
         profile.name
           ? `Saved. ${profile.name}'s details will appear on every summary.`
@@ -1516,6 +1843,78 @@
     // 11. History search
     $('history-search').addEventListener('input', renderHistory);
 
+    // 11b. Doctor view, visit notes, photos and timeline
+    $('btn-doctor-timeline')?.addEventListener('click', () => navigate('timeline'));
+    $('btn-doctor-new')?.addEventListener('click', () => {
+      state.currentEntry = null;
+      navigate('input');
+    });
+
+    $('doctor-list')?.addEventListener('click', (event) => {
+      const openBtn = event.target.closest('[data-doctor-open]');
+      if (openBtn) {
+        const id = openBtn.getAttribute('data-doctor-open');
+        const found = window.VOICECARE_STORAGE.getHistory().find((x) => x.id === id);
+        if (!found) return;
+        state.currentEntry = found;
+        renderSummaryScreen();
+        navigate('summary');
+        return;
+      }
+      const notesBtn = event.target.closest('[data-doctor-notes]');
+      if (notesBtn) {
+        openNotesScreen(notesBtn.getAttribute('data-doctor-notes'));
+        return;
+      }
+      const reviewBtn = event.target.closest('[data-doctor-review]');
+      if (reviewBtn) toggleReviewed(reviewBtn.getAttribute('data-doctor-review'));
+    });
+
+    $('timeline-list')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-timeline-open]');
+      if (!btn) return;
+      const found = window.VOICECARE_STORAGE.getHistory().find(
+        (x) => x.id === btn.getAttribute('data-timeline-open')
+      );
+      if (!found) return;
+      state.currentEntry = found;
+      renderSummaryScreen();
+      navigate('summary');
+    });
+
+    $('notes-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const id = state.notesEntryId;
+      if (!id) return;
+      const noteText = (value, max) => String(value || '').trim().slice(0, max);
+      updateEntry(id, {
+        doctorNote: noteText($('note-doctor-said').value, 600),
+        prescribedMeds: noteText($('note-medicines').value, 400),
+        nextVisitAt: $('note-next-visit').value || null
+      });
+      renderHomeStats();
+      showToast('Visit notes saved.');
+    });
+
+    $('btn-add-photo')?.addEventListener('click', () => $('note-photo-input')?.click());
+
+    $('note-photo-input')?.addEventListener('change', async (event) => {
+      const input = event.target;
+      await addPhotos(input.files);
+      input.value = '';
+    });
+
+    $('note-photos')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-photo-remove]');
+      if (!btn || !state.notesEntryId) return;
+      const remaining = window.VOICECARE_STORAGE
+        .getPhotos(state.notesEntryId)
+        .filter((photo) => photo.id !== btn.getAttribute('data-photo-remove'));
+      window.VOICECARE_STORAGE.savePhotos(state.notesEntryId, remaining);
+      updateEntry(state.notesEntryId, { photosCount: remaining.length });
+      renderPhotos();
+    });
+
     // 12. Accessibility & Settings
     const saveAcc = () => {
       state.accessibility = {
@@ -1590,6 +1989,13 @@
     applyAccessibility();
     applyLanguage();
     wireEvents();
+    updateOfflineBanner();
+    window.addEventListener('online', () => {
+      updateOfflineBanner();
+      showToast('Back online. You can generate summaries again.');
+      maybeAutoSync();
+    });
+    window.addEventListener('offline', updateOfflineBanner);
 
     const isFirstInstall = !window.VOICECARE_STORAGE.hasOnboarded() && !state.user;
     const splashStartBtn = $('btn-splash-start');

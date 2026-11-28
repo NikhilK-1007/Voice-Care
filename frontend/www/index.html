@@ -47,6 +47,11 @@
   </svg>
 
   <div class="app">
+    <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-info"></use></svg>
+      <span>You are offline. Your description is saved as a draft — generate the summary when the internet returns.</span>
+    </div>
+
     <!-- Hidden topbar preserved for DOM safety -->
     <header id="topbar" class="appbar hidden" aria-hidden="true">
       <button id="btn-back" class="icon-button" type="button" aria-label="Go back">
@@ -376,6 +381,26 @@
             </span>
           </button>
 
+          <button id="tile-doctor" class="quick-tile" type="button">
+            <span class="tile-badge-icon tile-icon-mint">
+              <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg>
+            </span>
+            <span>
+              <span class="quick-tile-title">Doctor view</span>
+              <span class="quick-tile-meta" id="home-doctor-count">0 visits · 0 reviewed</span>
+            </span>
+          </button>
+
+          <button id="tile-timeline" class="quick-tile" type="button">
+            <span class="tile-badge-icon tile-icon-blue">
+              <svg class="icon" aria-hidden="true"><use href="#i-history"></use></svg>
+            </span>
+            <span>
+              <span class="quick-tile-title">Visit timeline</span>
+              <span class="quick-tile-meta" id="home-timeline-meta">Your health over time</span>
+            </span>
+          </button>
+
           <button id="tile-about" class="quick-tile" type="button">
             <span class="tile-badge-icon tile-icon-rose">
               <svg class="icon" aria-hidden="true"><use href="#i-shield"></use></svg>
@@ -620,7 +645,7 @@
         </div>
 
         <div id="summary-ai-pane" class="summary-dual">
-          <div class="summary-lang-block">
+          <div class="summary-lang-block" id="summary-native-block">
             <p class="summary-lang-label" id="summary-native-label">Your language</p>
             <div id="summary-sections-container"></div>
           </div>
@@ -869,6 +894,81 @@
         </div>
 
         <div id="history-list"></div>
+      </section>
+
+      <!-- 13 · DOCTOR VIEW -->
+      <section id="screen-doctor" class="screen" aria-label="Doctor view">
+        <div class="page-head">
+          <p class="eyebrow">Hand your phone to the doctor</p>
+          <h2 class="page-title">Doctor view</h2>
+          <p class="page-sub">
+            Every visit in one place, newest first. Mark a visit as reviewed after the consultation.
+          </p>
+        </div>
+
+        <div class="btn-row" style="margin-bottom: 14px;">
+          <button id="btn-doctor-timeline" class="btn btn-secondary btn-sm" type="button">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-history"></use></svg>
+            Timeline
+          </button>
+          <button id="btn-doctor-new" class="btn btn-secondary btn-sm" type="button">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+            New summary
+          </button>
+        </div>
+
+        <div id="doctor-list"></div>
+      </section>
+
+      <!-- 14 · VISIT NOTES -->
+      <section id="screen-notes" class="screen" aria-label="Visit notes">
+        <div class="page-head">
+          <p class="eyebrow">After the visit</p>
+          <h2 class="page-title">Visit notes</h2>
+          <p class="page-sub" id="notes-subtitle">Write down what your doctor said, in your own words.</p>
+        </div>
+
+        <form id="notes-form" class="stack" novalidate>
+          <section class="panel stack">
+            <div class="field">
+              <label class="field-label" for="note-doctor-said">What the doctor said</label>
+              <textarea id="note-doctor-said" class="textarea" rows="3" maxlength="600"
+                        placeholder="e.g. Viral fever. Rest for 3 days and drink plenty of water."></textarea>
+            </div>
+            <div class="field">
+              <label class="field-label" for="note-medicines">Medicines prescribed</label>
+              <textarea id="note-medicines" class="textarea" rows="2" maxlength="400"
+                        placeholder="e.g. Paracetamol 500 mg twice a day for 3 days"></textarea>
+            </div>
+            <div class="field">
+              <label class="field-label" for="note-next-visit">Next visit <span class="optional">optional</span></label>
+              <input id="note-next-visit" class="input" type="date" />
+            </div>
+          </section>
+
+          <section class="panel stack">
+            <p class="section-label" style="margin-top: 0;">Report &amp; prescription photos</p>
+            <input id="note-photo-input" class="hidden" type="file" accept="image/*" capture="environment" multiple />
+            <button id="btn-add-photo" class="btn btn-secondary" type="button">
+              <svg class="icon icon-sm" aria-hidden="true"><use href="#i-plus"></use></svg>
+              Add photo
+            </button>
+            <div id="note-photos" class="photo-grid"></div>
+            <p class="panel-sub">Up to 4 photos, shrunk and stored on this phone only. They appear in Doctor view.</p>
+          </section>
+
+          <button class="btn btn-primary" type="submit">Save visit notes</button>
+        </form>
+      </section>
+
+      <!-- 15 · TIMELINE -->
+      <section id="screen-timeline" class="screen" aria-label="Visit timeline">
+        <div class="page-head">
+          <p class="eyebrow">Your health over time</p>
+          <h2 class="page-title">Timeline</h2>
+          <p class="page-sub">Each dot is one visit. Tap a visit to reopen its summary.</p>
+        </div>
+        <div id="timeline-list"></div>
       </section>
 
       <!-- 12 · SETTINGS (PDF Page 4) -->

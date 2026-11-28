@@ -197,6 +197,7 @@ window.VOICECARE_SUPABASE = (() => {
     }
 
     try {
+      // Columns that exist in the current schema (see supabase/schema.sql).
       const record = {
         id: entry.id,
         user_id: session.user?.id || user.uid,
@@ -210,11 +211,37 @@ window.VOICECARE_SUPABASE = (() => {
         updated_at: entry.updatedAt || new Date().toISOString()
       };
 
-      const { error } = await sb.from('summaries').upsert(record, { onConflict: 'id' });
+      // Everything the app shows for a visit. These live in their own columns so
+      // the doctor view, timeline and notes survive a reinstall or a new phone.
+      const extended = {
+        ...record,
+        english_summary: entry.englishSummary || null,
+        urgent_flags: Array.isArray(entry.urgentFlags) ? entry.urgentFlags : [],
+        missing_info: Array.isArray(entry.missingInfo) ? entry.missingInfo : [],
+        follow_up_answers: Array.isArray(entry.followUpAnswers) ? entry.followUpAnswers : [],
+        quick_info: entry.quickInfo || {},
+        reviewed_at: entry.reviewedAt || null,
+        doctor_note: entry.doctorNote || '',
+        prescribed_medicines: entry.prescribedMeds || '',
+        next_visit_at: entry.nextVisitAt || null
+      };
+
+      let payload = extended;
+      let { error } = await sb.from('summaries').upsert(payload, { onConflict: 'id' });
+
+      // Older projects may not have run the newest migration yet. A missing
+      // column must not stop the visit from being backed up, so drop the
+      // optional columns and save the core record instead.
+      if (error && /column|schema cache|PGRST204/i.test(error.message || '')) {
+        console.warn('[VoiceCare Supabase] Extended columns missing, saving core fields.');
+        payload = record;
+        ({ error } = await sb.from('summaries').upsert(payload, { onConflict: 'id' }));
+      }
+
       if (error) {
         // If RLS denies UPDATE during upsert on a fresh row, try plain INSERT
         if (/42501|row-level security|policy/i.test(error.message || '')) {
-          const ins = await sb.from('summaries').insert(record);
+          const ins = await sb.from('summaries').insert(payload);
           if (!ins.error) return { ok: true };
         }
         console.warn('[VoiceCare Supabase] Cloud sync error:', error.message);
@@ -259,6 +286,15 @@ window.VOICECARE_SUPABASE = (() => {
         language: row.language,
         languageLabel: row.language_label,
         summary: row.summary,
+        englishSummary: row.english_summary || null,
+        urgentFlags: Array.isArray(row.urgent_flags) ? row.urgent_flags : [],
+        missingInfo: Array.isArray(row.missing_info) ? row.missing_info : [],
+        followUpAnswers: Array.isArray(row.follow_up_answers) ? row.follow_up_answers : [],
+        quickInfo: row.quick_info || {},
+        reviewedAt: row.reviewed_at || null,
+        doctorNote: row.doctor_note || '',
+        prescribedMeds: row.prescribed_medicines || '',
+        nextVisitAt: row.next_visit_at || null,
         metadata: row.metadata,
         confirmed: row.confirmed,
         synced: true,
@@ -403,6 +439,40 @@ window.VOICECARE_SUPABASE = (() => {
     } catch (err) {
       console.warn('[VoiceCare Supabase] Cloud delete skipped:', err.message);
       return false;
+    }
+  }
+
+  /**
+   * The quick-info card is account data, not visit data, so it is stored in the
+   * user's Supabase profile metadata instead of a summaries row.
+   */
+  async function syncProfileToCloud(user, profile) {
+    if (!user || user.mode !== 'supabase' || !isConfigured()) return { ok: false, skipped: true };
+    const sb = await getClient();
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+    try {
+      const { error } = await sb.auth.updateUser({
+        data: { voicecare_profile: { ...(profile || {}), updatedAt: new Date().toISOString() } }
+      });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /** Reads the quick-info card saved on another phone, so it follows the account. */
+  async function loadCloudProfile(user) {
+    if (!user || user.mode !== 'supabase' || !isConfigured()) return { ok: false, skipped: true };
+    const sb = await getClient();
+    if (!sb) return { ok: false, error: 'Offline or Supabase unavailable.' };
+    try {
+      const { data, error } = await sb.auth.getUser();
+      if (error || !data?.user) return { ok: false, error: error?.message || 'Not signed in.' };
+      const profile = data.user.user_metadata?.voicecare_profile;
+      return { ok: true, profile: profile && typeof profile === 'object' ? profile : null };
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   }
 
@@ -643,6 +713,8 @@ window.VOICECARE_SUPABASE = (() => {
     syncSummaryToCloud,
     deleteCloudSummary,
     loadCloudSummaries,
+    syncProfileToCloud,
+    loadCloudProfile,
     syncRemindersToCloud,
     loadCloudReminders
   };

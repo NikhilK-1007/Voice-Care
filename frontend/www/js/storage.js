@@ -11,6 +11,8 @@ const KEYS = {
   ACCESSIBILITY: 'voicecare_accessibility',
   HISTORY: 'voicecare_history',
   PROFILE: 'voicecare_quick_info',
+  DELETED: 'voicecare_deleted_ids',
+  PHOTOS: 'voicecare_photos',
   DRAFT_TEXT: 'voicecare_draft_text',
   ONBOARDED: 'voicecare_onboarded'
 };
@@ -128,7 +130,53 @@ window.VOICECARE_STORAGE = {
     const key = scopedKey(KEYS.HISTORY, uid);
     const list = safeRead(key, []).filter((item) => item.id !== id);
     safeWrite(key, list);
+    // Remember the deletion so the next cloud sync does not bring the visit back.
+    const deleted = safeRead(KEYS.DELETED, []).filter((x) => x !== id);
+    deleted.push(id);
+    safeWrite(KEYS.DELETED, deleted.slice(-100));
+    window.VOICECARE_STORAGE.deletePhotos(id);
     return list;
+  },
+
+  /** Ids the patient deleted while offline; the next sync removes them from the cloud. */
+  getDeletedIds() {
+    return safeRead(KEYS.DELETED, []).filter((x) => typeof x === 'string');
+  },
+  clearDeletedIds() {
+    safeWrite(KEYS.DELETED, []);
+  },
+
+  /**
+   * Report photos (lab slips, prescriptions, rash photos) live beside the
+   * entry, not inside it, so saving/editing a summary never rewrites images.
+   * @param {string} entryId
+   * @returns {Array<{ id: string, dataUrl: string, addedAt: string }>}
+   */
+  getPhotos(entryId) {
+    const map = safeRead(KEYS.PHOTOS, {}) || {};
+    const list = map[entryId];
+    return Array.isArray(list) ? list.filter((p) => p && p.dataUrl) : [];
+  },
+  savePhotos(entryId, photos) {
+    if (!entryId) return [];
+    const map = safeRead(KEYS.PHOTOS, {}) || {};
+    const list = (Array.isArray(photos) ? photos : [])
+      .filter((p) => p && typeof p.dataUrl === 'string')
+      .slice(0, 4);
+    if (list.length) map[entryId] = list;
+    else delete map[entryId];
+    safeWrite(KEYS.PHOTOS, map);
+    return list;
+  },
+  deletePhotos(entryId) {
+    const map = safeRead(KEYS.PHOTOS, {}) || {};
+    if (map[entryId]) {
+      delete map[entryId];
+      safeWrite(KEYS.PHOTOS, map);
+    }
+  },
+  countPhotos(entryId) {
+    return window.VOICECARE_STORAGE.getPhotos(entryId).length;
   },
 
   /**
@@ -153,6 +201,7 @@ window.VOICECARE_STORAGE = {
     return Boolean(profile.name || profile.age || profile.bloodGroup || profile.allergies);
   },
   saveProfile(profile) {
+    const existing = safeRead(scopedKey(KEYS.PROFILE), null);
     const clean = {
       name: String(profile?.name || '').trim().slice(0, 80),
       age: String(profile?.age || '').trim().slice(0, 3),
@@ -160,6 +209,7 @@ window.VOICECARE_STORAGE = {
       bloodGroup: String(profile?.bloodGroup || '').trim().slice(0, 8),
       allergies: String(profile?.allergies || '').trim().slice(0, 200),
       emergencyContact: String(profile?.emergencyContact || '').trim().slice(0, 20),
+      createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     safeWrite(scopedKey(KEYS.PROFILE), clean);

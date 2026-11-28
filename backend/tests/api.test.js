@@ -284,3 +284,62 @@ test('HTTP API /api/health and /api/summarize work end-to-end in demo fallback m
     if (originalFallback !== undefined) process.env.ALLOW_DEMO_FALLBACK = originalFallback;
   }
 });
+
+test('a non-English "English" summary is flagged instead of shown to the doctor', () => {
+  const hindiSections = {
+    mainHealthConcern: 'सीने में दर्द',
+    symptoms: ['सीने में दर्द'],
+    duration: '2 दिन से',
+    severity: 'तेज',
+    relevantMedicalHistory: NOT_MENTIONED,
+    currentMedications: NOT_MENTIONED,
+    additionalObservations: NOT_MENTIONED,
+    questionsToAskDoctor: ['क्या जाँच करानी चाहिए?']
+  };
+
+  const result = enforceSummarySchema(
+    { ...hindiSections, englishSummary: { ...hindiSections } },
+    'सीने में दर्द 2 दिन से तेज है',
+    'hi',
+    'gemini',
+    { model: 'test' }
+  );
+
+  // The model repeated the Hindi text in the English field. That must never be
+  // presented to a doctor as an English translation.
+  assert.equal(result.metadata.englishIsGenerated, false);
+});
+
+test('a real Latin-script englishSummary is kept and marked as generated', () => {
+  const result = enforceSummarySchema(
+    {
+      mainHealthConcern: 'सीने में दर्द',
+      symptoms: ['सीने में दर्द'],
+      duration: '2 दिन से',
+      severity: 'तेज',
+      relevantMedicalHistory: NOT_MENTIONED,
+      currentMedications: NOT_MENTIONED,
+      additionalObservations: NOT_MENTIONED,
+      questionsToAskDoctor: ['क्या जाँच करानी चाहिए?'],
+      englishSummary: {
+        mainHealthConcern: 'Chest pain',
+        symptoms: ['Chest pain'],
+        duration: 'For 2 days',
+        severity: 'Severe',
+        relevantMedicalHistory: NOT_MENTIONED,
+        currentMedications: NOT_MENTIONED,
+        additionalObservations: NOT_MENTIONED,
+        questionsToAskDoctor: ['Which tests should I get?']
+      },
+      urgent_flags: ['सीने में दर्द']
+    },
+    'सीने में दर्द 2 दिन से तेज है',
+    'hi',
+    'gemini',
+    { model: 'test' }
+  );
+
+  assert.equal(result.metadata.englishIsGenerated, true);
+  assert.equal(result.englishSummary.mainHealthConcern, 'Chest pain');
+  assert.deepEqual(result.urgentFlags, ['सीने में दर्द']);
+});

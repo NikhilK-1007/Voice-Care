@@ -1853,3 +1853,107 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   font-size: 0.78rem;
   color: #64748b;
 }
+
+/* ------------------------------------------------------------------ *
+ * Phase 2 · Doctor view, visit notes, photos, timeline, offline banner
+ * ------------------------------------------------------------------ */
+
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--warn-soft, #fdf4e3);
+  border-bottom: 1px solid var(--warn-border, #f0d9a8);
+  color: #6b4406;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.offline-banner.hidden { display: none; }
+
+.doctor-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(19, 34, 31, 0.04);
+}
+.doctor-card.is-reviewed { border-color: var(--accent-soft); background: #fbfdfc; }
+.doctor-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.doctor-name { margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+.doctor-meta { margin: 4px 0 0; font-size: 0.82rem; color: var(--ink-3); line-height: 1.45; }
+.doctor-concern { margin: 12px 0 0; font-size: 1rem; font-weight: 600; color: var(--ink); line-height: 1.4; }
+.doctor-note { margin: 8px 0 0; font-size: 0.9rem; color: var(--ink-2); line-height: 1.5; }
+.doctor-card .urgent-flag-list { margin: 10px 0 0; }
+.badge-ok { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 12px; }
+.photo-grid:empty { display: none; }
+.photo-item { position: relative; margin: 0; }
+.photo-thumb { width: 100%; height: 96px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-sunk); }
+.photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.photo-strip { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.photo-thumb-sm { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+
+.timeline-group { margin-bottom: 22px; }
+.timeline-month { margin: 0 0 10px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.timeline-items { list-style: none; margin: 0; padding: 0; }
+.timeline-item { position: relative; padding-left: 26px; padding-bottom: 12px; }
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 18px;
+  bottom: -6px;
+  width: 2px;
+  background: var(--line);
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-dot {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 3px solid var(--line-strong);
+  box-sizing: border-box;
+}
+.timeline-dot.is-reviewed { background: var(--accent); border-color: var(--accent-soft); }
+.timeline-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.timeline-card:active { background: var(--surface-sunk); }
+.timeline-date { display: block; font-size: 0.76rem; color: var(--ink-3); }
+.timeline-title { display: block; margin-top: 2px; font-size: 0.98rem; font-weight: 600; color: var(--ink); }
+.timeline-meta { display: block; margin-top: 4px; font-size: 0.78rem; color: var(--ink-3); }
+
+@media (min-width: 480px) {
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -382,6 +382,7 @@ module.exports = {
   filterUrgentFlags,
   normalizeMissingInfo,
   normalizeFollowUpQuestions,
+  normalizeSections,
   containsNonLatinScript,
   enforceSummarySchema,
   enforceFollowUpSchema

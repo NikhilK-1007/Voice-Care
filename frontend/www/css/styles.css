@@ -1705,6 +1705,10 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  /* Long names and allergy lists wrap instead of being cut off. */
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   color: #1e3a8a;
@@ -1955,11 +1959,15 @@ svg.icon-sm { width: 16px; height: 16px; stroke-width: 1.9; }
   font-size: 1.02rem;
   font-weight: 700;
   color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .patient-meta {
   margin: 4px 0 0;
   font-size: 0.8rem;
   color: var(--ink-3);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .patient-card .item-actions {
   margin-top: 12px;

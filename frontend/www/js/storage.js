@@ -227,6 +227,12 @@ window.VOICECARE_STORAGE = {
     return window.VOICECARE_STORAGE.getActivePatient()?.id || null;
   },
 
+  /** One saved patient by id, or null when it was deleted. */
+  getPatientById(id) {
+    if (!id) return null;
+    return window.VOICECARE_STORAGE.getPatients().find((item) => item.id === id) || null;
+  },
+
   setActivePatient(id) {
     if (!id) return;
     localStorage.setItem(scopedKey(KEYS.ACTIVE_PATIENT), id);

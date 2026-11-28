@@ -585,9 +585,19 @@
     list.innerHTML = items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   }
 
+  /**
+   * Patient details for a visit. Newer visits store the patient id, so edits to
+   * that patient's record (name, blood group, allergies) show on old summaries
+   * too instead of the short details captured when the visit was created.
+   */
+  function entryQuickInfo(entry) {
+    const live = window.VOICECARE_STORAGE.getPatientById(entry?.patientId);
+    return live || entry?.quickInfo || window.VOICECARE_STORAGE.getProfile();
+  }
+
   function renderQuickInfoStrip(entry) {
     const strip = $('summary-quickinfo-strip');
-    const profile = entry.quickInfo || window.VOICECARE_STORAGE.getProfile();
+    const profile = entryQuickInfo(entry);
     const line = quickInfoLine(profile);
     if (!line) {
       strip.classList.add('hidden');
@@ -743,6 +753,8 @@
         id: state.currentEntry?.id || `vc_${Date.now()}`,
         patientName: state.user?.name || '',
         patientText,
+        // Ties the visit to a patient record so later corrections show here.
+        patientId: window.VOICECARE_STORAGE.getActivePatientId(),
         language: state.language,
         // Follow the words the patient actually used, not the menu language: a
         // patient can type Hindi while the app itself is in English.
@@ -1072,7 +1084,7 @@
     container.innerHTML = list
       .map((entry) => {
         // The name is already the card title, so the meta line only adds the rest.
-        const info = entry.quickInfo || window.VOICECARE_STORAGE.getProfile();
+        const info = entryQuickInfo(entry);
         const quick = [
           info.age ? `${info.age} yrs` : '',
           info.gender || '',
@@ -1752,8 +1764,10 @@
         return;
       }
 
+      const editingId = state.editingPatientId;
+      const previous = editingId ? window.VOICECARE_STORAGE.getPatientById(editingId) : null;
       const patient = window.VOICECARE_STORAGE.savePatient({
-        id: state.editingPatientId,
+        id: editingId,
         name,
         age: $('profile-age').value,
         gender: $('profile-gender').value,
@@ -1764,6 +1778,27 @@
       window.VOICECARE_STORAGE.savePrescriptions(patient.id, state.pendingRx);
       window.VOICECARE_STORAGE.setActivePatient(patient.id);
       const profile = window.VOICECARE_STORAGE.getProfile();
+
+      // Keep every visit of this patient in step with the corrected details, so
+      // an old summary never keeps a short/outdated name or missing blood group.
+      for (const item of window.VOICECARE_STORAGE.getHistory()) {
+        const linked = item.patientId === patient.id;
+        const byOldName =
+          !item.patientId &&
+          previous?.name &&
+          item.quickInfo?.name === previous.name;
+        if (!linked && !byOldName) continue;
+        const updated = {
+          ...item,
+          patientId: patient.id,
+          quickInfo: profile,
+          synced: false,
+          updatedAt: new Date().toISOString()
+        };
+        window.VOICECARE_STORAGE.saveHistoryEntry(updated);
+        if (state.currentEntry?.id === item.id) state.currentEntry = updated;
+        persistEntryToCloud(updated);
+      }
 
       closePatientForm();
       renderHomeStats();

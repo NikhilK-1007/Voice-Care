@@ -57,8 +57,13 @@ window.VOICECARE_PDF = (() => {
     return String(value || '').trim() || NOT_MENTIONED;
   }
 
+  /** Live patient record when the visit is linked to one (later edits show). */
+  function entryPatient(entry) {
+    return window.VOICECARE_STORAGE?.getPatientById?.(entry?.patientId) || entry?.quickInfo || {};
+  }
+
   function patientLine(entry) {
-    const info = entry.quickInfo || {};
+    const info = entryPatient(entry);
     const parts = [];
     if (info.name) parts.push(info.name);
     if (info.age) parts.push(`${info.age} yrs`);
@@ -76,7 +81,7 @@ window.VOICECARE_PDF = (() => {
       timeStyle: 'short'
     });
 
-    const info = entry.quickInfo || {};
+    const info = entryPatient(entry);
     const flags = Array.isArray(entry.urgentFlags) ? entry.urgentFlags : [];
 
     const lines = [
@@ -252,7 +257,7 @@ window.VOICECARE_PDF = (() => {
     y += 6;
 
     // Quick-info card
-    const info = entry.quickInfo || {};
+    const info = entryPatient(entry);
     const infoBits = [];
     if (info.name) infoBits.push(`Name: ${info.name}`);
     if (info.age) infoBits.push(`Age: ${info.age}`);
@@ -262,7 +267,14 @@ window.VOICECARE_PDF = (() => {
     if (info.emergencyContact) infoBits.push(`Emergency contact: ${info.emergencyContact}`);
 
     if (infoBits.length) {
-      const boxHeight = 16;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.6);
+      const infoLine = toPdfAscii(infoBits.join('   |   '));
+      // Long names and allergy lists need more than two lines, so the info box
+      // grows with its content instead of cutting the details off.
+      const wrapped = doc.splitTextToSize(infoLine || 'Not provided', maxWidth - 6);
+      const shown = wrapped.slice(0, 4);
+      const boxHeight = 11 + shown.length * 4;
       ensureSpace(boxHeight + 6);
       doc.setFillColor(240, 249, 255);
       doc.setDrawColor(186, 230, 253);
@@ -273,9 +285,7 @@ window.VOICECARE_PDF = (() => {
       doc.text('PATIENT INFORMATION', margin + 3, y + 5.4);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(30, 41, 59);
-      const infoLine = toPdfAscii(infoBits.join('   |   '));
-      const wrapped = doc.splitTextToSize(infoLine || 'Not provided', maxWidth - 6);
-      doc.text(wrapped.slice(0, 2), margin + 3, y + 10.5);
+      doc.text(shown, margin + 3, y + 10.5);
       y += boxHeight + 5;
     }
 
